@@ -31,6 +31,8 @@ jobs:
 
       - name: Typecheck web
         run: npm run build -w @fishmaster/web
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001
 
       - name: Typecheck mobile
         run: npx tsc --noEmit -p apps/mobile

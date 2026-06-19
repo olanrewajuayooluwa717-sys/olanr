@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Card, btnStyle } from '../../components/Shell';
+import { Card, btnStyle } from '../../../components/Shell';
 
 export default function SubscribeSuccessPage() {
   return (
