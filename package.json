@@ -1,0 +1,33 @@
+{
+  "name": "fishmaster",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Aquaculture management platform with Excel-derived calculation engine",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "dev:api": "npm run dev -w @fishmaster/api",
+    "dev:web": "npm run dev -w @fishmaster/web",
+    "dev:mobile": "npm run start -w @fishmaster/mobile",
+    "db:setup": "npm run db:setup -w @fishmaster/db",
+    "postinstall": "npm run build -w @fishmaster/shared-types -w @fishmaster/calc-engine -w @fishmaster/db --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "dependencies": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "0.81.4"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "overrides": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "0.81.4"
+  }
+}

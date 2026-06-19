@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci --ignore-scripts --legacy-peer-deps
+
+      - name: Build packages
+        run: npm run build -w @fishmaster/shared-types -w @fishmaster/calc-engine -w @fishmaster/db
+
+      - name: Calc engine tests
+        run: npm run test -w @fishmaster/calc-engine
+
+      - name: Typecheck API
+        run: npm run build -w @fishmaster/api
+
+      - name: Typecheck web
+        run: npm run build -w @fishmaster/web
+
+      - name: Typecheck mobile
+        run: npx tsc --noEmit -p apps/mobile

@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "Fishmaster",
+    "slug": "fishmaster",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "fishmaster",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#0d4f6e"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.fishmaster.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0d4f6e"
+      },
+      "package": "app.fishmaster.mobile"
+    },
+    "plugins": ["expo-router"]
+  }
+}
