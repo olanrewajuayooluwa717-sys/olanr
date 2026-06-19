@@ -4,6 +4,7 @@ import { prisma } from '@fishmaster/db';
 import { generateStockCycleReport, detectFeedAlert } from '@fishmaster/calc-engine';
 import { toStockCycleInput } from './mappers';
 import { requireAuth, signToken } from './auth-middleware';
+import { routeParam } from './params';
 
 export const cyclesRouter = Router();
 
@@ -121,8 +122,9 @@ cyclesRouter.post('/', async (req, res) => {
 /** GET /api/cycles/:id/report */
 cyclesRouter.get('/:id/report', async (req, res) => {
   try {
+    const id = routeParam(req, 'id');
     const cycle = await prisma.stockCycle.findUnique({
-      where: { id: req.params.id },
+      where: { id },
       include: cycleInclude,
     });
     if (!cycle) {
@@ -139,16 +141,17 @@ cyclesRouter.get('/:id/report', async (req, res) => {
 /** POST /api/cycles/:id/mortality */
 cyclesRouter.post('/:id/mortality', requireAuth, async (req, res) => {
   try {
+    const id = routeParam(req, 'id');
     const { date, count } = req.body as { date: string; count: number };
     const log = await prisma.dailyMortalityLog.upsert({
       where: {
         stockCycleId_date: {
-          stockCycleId: req.params.id,
+          stockCycleId: id,
           date: new Date(date),
         },
       },
       update: { count },
-      create: { stockCycleId: req.params.id, date: new Date(date), count },
+      create: { stockCycleId: id, date: new Date(date), count },
     });
     res.json(log);
   } catch (err) {
@@ -159,20 +162,21 @@ cyclesRouter.post('/:id/mortality', requireAuth, async (req, res) => {
 /** POST /api/cycles/:id/feed */
 cyclesRouter.post('/:id/feed', requireAuth, async (req, res) => {
   try {
+    const id = routeParam(req, 'id');
     const { date, actualKg } = req.body as { date: string; actualKg: number };
     const log = await prisma.dailyFeedLog.upsert({
       where: {
         stockCycleId_date: {
-          stockCycleId: req.params.id,
+          stockCycleId: id,
           date: new Date(date),
         },
       },
       update: { actualKg },
-      create: { stockCycleId: req.params.id, date: new Date(date), actualKg },
+      create: { stockCycleId: id, date: new Date(date), actualKg },
     });
 
     const cycle = await prisma.stockCycle.findUnique({
-      where: { id: req.params.id },
+      where: { id },
       include: cycleInclude,
     });
     if (!cycle) {

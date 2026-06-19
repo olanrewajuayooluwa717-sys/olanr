@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '@fishmaster/db';
 import { requireRole } from './role-middleware';
+import { routeParam } from './params';
 
 export const adminRouter = Router();
 const admin = requireRole('super_admin', 'manager');
@@ -22,7 +23,7 @@ adminRouter.get('/members', admin, async (_req, res) => {
 /** PATCH /api/admin/members/:id/suspend */
 adminRouter.patch('/members/:id/suspend', superOnly, async (req, res) => {
   const user = await prisma.user.update({
-    where: { id: req.params.id },
+    where: { id: routeParam(req, 'id') },
     data: { subscriptionStatus: 'suspended' },
   });
   res.json(user);
@@ -31,7 +32,7 @@ adminRouter.patch('/members/:id/suspend', superOnly, async (req, res) => {
 /** PATCH /api/admin/members/:id/activate */
 adminRouter.patch('/members/:id/activate', superOnly, async (req, res) => {
   const user = await prisma.user.update({
-    where: { id: req.params.id },
+    where: { id: routeParam(req, 'id') },
     data: { subscriptionStatus: 'active' },
   });
   res.json(user);
@@ -41,7 +42,7 @@ adminRouter.patch('/members/:id/activate', superOnly, async (req, res) => {
 adminRouter.patch('/members/:id/role', superOnly, async (req, res) => {
   const { role } = req.body as { role: 'member' | 'manager' | 'super_admin' };
   const user = await prisma.user.update({
-    where: { id: req.params.id },
+    where: { id: routeParam(req, 'id') },
     data: { role },
   });
   res.json(user);
@@ -81,7 +82,7 @@ adminRouter.post('/posts', admin, async (req, res) => {
 adminRouter.patch('/posts/:id', admin, async (req, res) => {
   const { title, body, type, published } = req.body;
   const post = await prisma.contentPost.update({
-    where: { id: req.params.id },
+    where: { id: routeParam(req, 'id') },
     data: { title, body, type, published },
   });
   res.json(post);
@@ -89,6 +90,6 @@ adminRouter.patch('/posts/:id', admin, async (req, res) => {
 
 /** DELETE /api/admin/posts/:id */
 adminRouter.delete('/posts/:id', admin, async (req, res) => {
-  await prisma.contentPost.delete({ where: { id: req.params.id } });
+  await prisma.contentPost.delete({ where: { id: routeParam(req, 'id') } });
   res.json({ ok: true });
 });
