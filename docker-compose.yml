@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fishmaster
+      POSTGRES_PASSWORD: fishmaster
+      POSTGRES_DB: fishmaster
+    ports:
+      - "5432:5432"
+    volumes:
+      - fishmaster_pg:/var/lib/postgresql/data
+
+volumes:
+  fishmaster_pg:

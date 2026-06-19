@@ -10,15 +10,19 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:setup": "prisma generate && prisma db push && tsx prisma/seed.ts && tsc",
+    "db:release": "prisma db push && tsx prisma/seed.ts",
     "postinstall": "prisma generate"
   },
-  "dependencies": {
-    "@prisma/client": "^6.3.1"
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
-  "devDependencies": {
+  "dependencies": {
+    "@prisma/client": "^6.3.1",
     "bcryptjs": "^2.4.3",
     "prisma": "^6.3.1",
-    "tsx": "^4.19.2",
+    "tsx": "^4.19.2"
+  },
+  "devDependencies": {
     "typescript": "^5.7.3"
   }
 }

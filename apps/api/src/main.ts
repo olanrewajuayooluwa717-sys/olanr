@@ -19,8 +19,14 @@ app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), hand
 
 app.use(express.json());
 
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'fishmaster-api', database: true });
+app.get('/health', async (_req, res) => {
+  try {
+    const { prisma } = await import('@fishmaster/db');
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ok', service: 'fishmaster-api', database: true });
+  } catch {
+    res.status(503).json({ status: 'degraded', service: 'fishmaster-api', database: false });
+  }
 });
 
 app.use('/api/auth', authRouter);

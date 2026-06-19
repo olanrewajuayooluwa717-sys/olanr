@@ -45,8 +45,8 @@ npm.cmd run dev:mobile # Expo — see apps/mobile/MOBILE.md
 - [x] Next.js web (dashboard, reports, admin, Stripe checkout)
 - [x] Expo mobile (dashboard, all 21 reports, daily log, subscriptions)
 - [x] Stripe subscriptions (£1.50 / £2.50 / £6.00)
-- [ ] PostgreSQL production database
-- [ ] Production deploy (Railway/Render)
+- [x] GitHub + CI
+- [ ] **Production deploy** — see [DEPLOY.md](./DEPLOY.md) (Render + Vercel)
 - [ ] Phase 2: GPS directory, water parameters, uploads, multi-species
 
 ## Demo logins
@@ -58,7 +58,7 @@ npm.cmd run dev:mobile # Expo — see apps/mobile/MOBILE.md
 
 ## Key design decisions
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) · Mobile setup: [apps/mobile/MOBILE.md](./apps/mobile/MOBILE.md) · Stripe: [STRIPE.md](./STRIPE.md)
+See [ARCHITECTURE.md](./ARCHITECTURE.md) · Mobile: [apps/mobile/MOBILE.md](./apps/mobile/MOBILE.md) · Deploy: [DEPLOY.md](./DEPLOY.md) · Stripe: [STRIPE.md](./STRIPE.md)
 
 ## Excel reference
 

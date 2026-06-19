@@ -2,9 +2,9 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// SQLite for local dev — swap to postgresql for production
+// PostgreSQL — use Neon/Render locally (see docker-compose.yml) or SQLite file for legacy dev
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 

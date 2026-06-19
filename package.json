@@ -9,6 +9,8 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
+    "build:api": "npm run build -w @fishmaster/shared-types -w @fishmaster/calc-engine -w @fishmaster/db -w @fishmaster/api",
+    "start:api": "npm run start -w @fishmaster/api",
     "test": "npm run test --workspaces --if-present",
     "dev:api": "npm run dev -w @fishmaster/api",
     "dev:web": "npm run dev -w @fishmaster/web",
