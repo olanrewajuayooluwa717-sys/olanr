@@ -14,6 +14,8 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [mortality, setMortality] = useState({ date: '', count: '' });
   const [feed, setFeed] = useState({ date: '', actualKg: '' });
+  const [water, setWater] = useState({ date: '', ph: '', doMg: '', tempC: '', ammonia: '' });
+  const [waterAlert, setWaterAlert] = useState<string | null>(null);
   const [alert, setAlert] = useState<string | null>(null);
   const [news, setNews] = useState<FeedPost[]>([]);
   const [subscription, setSubscription] = useState<{ tier: string; status: string } | null>(null);
@@ -38,6 +40,12 @@ export default function HomePage() {
   };
 
   useEffect(loadReport, []);
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    setMortality((m) => ({ ...m, date: today }));
+    setFeed((f) => ({ ...f, date: today }));
+    setWater((w) => ({ ...w, date: today }));
+  }, []);
   useEffect(() => {
     fetch(`${API_URL}/api/content`).then((r) => r.json()).then(setNews).catch(() => {});
     if (localStorage.getItem('fishmaster_token')) {
@@ -74,6 +82,27 @@ export default function HomePage() {
     setFeed({ date: '', actualKg: '' });
   };
 
+  const logWater = async () => {
+    if (!cycleId) return;
+    const body: Record<string, unknown> = { date: water.date };
+    if (water.ph) body.ph = Number(water.ph);
+    if (water.doMg) body.dissolvedOxygenMgL = Number(water.doMg);
+    if (water.tempC) body.temperatureC = Number(water.tempC);
+    if (water.ammonia) body.ammoniaMgL = Number(water.ammonia);
+    const res = await fetch(`${API_URL}/api/cycles/${cycleId}/water`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.alerts?.length) {
+      setWaterAlert(data.alerts.map((a: { message: string }) => a.message).join(' · '));
+    } else {
+      setWaterAlert('Water parameters look good');
+    }
+    setWater((w) => ({ ...w, ph: '', doMg: '', tempC: '', ammonia: '' }));
+  };
+
   return (
     <main style={{ maxWidth: 960, margin: '0 auto', padding: '2rem' }}>
       <header style={{ marginBottom: '1.5rem' }}>
@@ -87,6 +116,7 @@ export default function HomePage() {
 
       {error && <p style={{ color: '#b45309' }}>{error}</p>}
       {alert && <p style={{ color: '#c2410c', fontWeight: 600, background: '#fff7ed', padding: '0.75rem', borderRadius: 8 }}>{alert}</p>}
+      {waterAlert && <p style={{ color: '#0369a1', fontWeight: 600, background: '#e0f2fe', padding: '0.75rem', borderRadius: 8 }}>{waterAlert}</p>}
 
       {news.length > 0 && (
         <Card title="News & Education">
@@ -111,6 +141,17 @@ export default function HomePage() {
 
             {cycleId && (
               <>
+                <Card title="Log water quality">
+                  <p style={{ fontSize: '0.85rem', color: '#666', margin: '0 0 0.75rem' }}>Targets: pH 6.5–8.5 · DO ≥5 mg/L · temp 25–30°C · ammonia &lt;0.5</p>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <input type="date" style={inputStyle} value={water.date} onChange={(e) => setWater({ ...water, date: e.target.value })} />
+                    <input type="number" step="0.1" style={inputStyle} placeholder="pH" value={water.ph} onChange={(e) => setWater({ ...water, ph: e.target.value })} />
+                    <input type="number" step="0.1" style={inputStyle} placeholder="DO mg/L" value={water.doMg} onChange={(e) => setWater({ ...water, doMg: e.target.value })} />
+                    <input type="number" step="0.1" style={inputStyle} placeholder="°C" value={water.tempC} onChange={(e) => setWater({ ...water, tempC: e.target.value })} />
+                    <input type="number" step="0.01" style={inputStyle} placeholder="NH₃ mg/L" value={water.ammonia} onChange={(e) => setWater({ ...water, ammonia: e.target.value })} />
+                    <button onClick={logWater} style={btnStyle}>Save & check</button>
+                  </div>
+                </Card>
                 <Card title="Log daily mortality">
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                     <input type="date" style={inputStyle} value={mortality.date} onChange={(e) => setMortality({ ...mortality, date: e.target.value })} />

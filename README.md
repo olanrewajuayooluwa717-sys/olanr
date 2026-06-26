@@ -46,8 +46,9 @@ npm.cmd run dev:mobile # Expo — see apps/mobile/MOBILE.md
 - [x] Expo mobile (dashboard, all 21 reports, daily log, subscriptions)
 - [x] Stripe subscriptions (£1.50 / £2.50 / £6.00)
 - [x] GitHub + CI
-- [ ] **Production deploy** — see [DEPLOY.md](./DEPLOY.md) (Render + Vercel)
-- [ ] Phase 2: GPS directory, water parameters, uploads, multi-species
+- [ ] **Production deploy** — see [DEPLOY.md](./DEPLOY.md) (Render + Vercel + Neon)
+- [x] Water parameter logging (Phase 2)
+- [ ] GPS farm directory, photo uploads, multi-species
 
 ## Demo logins
 

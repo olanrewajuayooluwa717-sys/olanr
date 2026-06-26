@@ -49,9 +49,8 @@ flowchart LR
 
 ## Planned Phase 2
 
-- NestJS migration with modules: `auth`, `farms`, `reports`, `billing`, `cms`
-- PostgreSQL for production (SQLite for local dev)
-- GPS farm directory, operations chart, water parameters
+- [x] Water parameter logging with advisory alerts
+- GPS farm directory, operations chart
 - Member photo uploads with admin approval
 - Multi-species support, gamification
 

@@ -5,6 +5,7 @@ import { generateStockCycleReport, detectFeedAlert } from '@fishmaster/calc-engi
 import { toStockCycleInput } from './mappers';
 import { requireAuth, signToken } from './auth-middleware';
 import { routeParam } from './params';
+import { evaluateWaterQuality } from './water-quality';
 
 export const cyclesRouter = Router();
 
@@ -196,6 +197,57 @@ cyclesRouter.post('/:id/feed', requireAuth, async (req, res) => {
         : 0;
 
     res.json({ log, alert: detectFeedAlert(expectedKg, actualKg) });
+  } catch (err) {
+    res.status(400).json({ error: String(err) });
+  }
+});
+
+/** GET /api/cycles/:id/water — recent water parameter logs */
+cyclesRouter.get('/:id/water', requireAuth, async (req, res) => {
+  try {
+    const id = routeParam(req, 'id');
+    const logs = await prisma.waterParameterLog.findMany({
+      where: { stockCycleId: id },
+      orderBy: { date: 'desc' },
+      take: 30,
+    });
+    res.json(logs);
+  } catch (err) {
+    res.status(400).json({ error: String(err) });
+  }
+});
+
+/** POST /api/cycles/:id/water — log water quality with advisory alerts */
+cyclesRouter.post('/:id/water', requireAuth, async (req, res) => {
+  try {
+    const id = routeParam(req, 'id');
+    const { date, ph, dissolvedOxygenMgL, temperatureC, ammoniaMgL, notes } = req.body as {
+      date: string;
+      ph?: number;
+      dissolvedOxygenMgL?: number;
+      temperatureC?: number;
+      ammoniaMgL?: number;
+      notes?: string;
+    };
+
+    const log = await prisma.waterParameterLog.upsert({
+      where: {
+        stockCycleId_date: { stockCycleId: id, date: new Date(date) },
+      },
+      update: { ph, dissolvedOxygenMgL, temperatureC, ammoniaMgL, notes: notes ?? null },
+      create: {
+        stockCycleId: id,
+        date: new Date(date),
+        ph,
+        dissolvedOxygenMgL,
+        temperatureC,
+        ammoniaMgL,
+        notes: notes ?? null,
+      },
+    });
+
+    const alerts = evaluateWaterQuality({ ph, dissolvedOxygenMgL, temperatureC, ammoniaMgL });
+    res.json({ log, alerts });
   } catch (err) {
     res.status(400).json({ error: String(err) });
   }

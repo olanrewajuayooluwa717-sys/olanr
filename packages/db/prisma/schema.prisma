@@ -98,6 +98,7 @@ model StockCycle {
   desiredFeedQuantityKg  Float
   mortalityLogs        DailyMortalityLog[]
   feedLogs             DailyFeedLog[]
+  waterLogs            WaterParameterLog[]
   createdAt            DateTime            @default(now())
 }
 
@@ -119,6 +120,21 @@ model DailyFeedLog {
   date         DateTime
   actualKg     Float
   createdAt    DateTime   @default(now())
+
+  @@unique([stockCycleId, date])
+}
+
+model WaterParameterLog {
+  id                String     @id @default(cuid())
+  stockCycleId      String
+  stockCycle        StockCycle @relation(fields: [stockCycleId], references: [id])
+  date              DateTime
+  ph                Float?
+  dissolvedOxygenMgL Float?
+  temperatureC      Float?
+  ammoniaMgL        Float?
+  notes             String?
+  createdAt         DateTime   @default(now())
 
   @@unique([stockCycleId, date])
 }

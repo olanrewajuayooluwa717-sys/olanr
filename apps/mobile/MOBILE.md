@@ -58,6 +58,7 @@ Same as web — `logunsina@yahoo.com` / `demo1234`
 | **`expo-asset` cannot be found** | Run `npm install --ignore-scripts` from repo root. |
 | **`@fishmaster/db` not found** | Run `npm run build -w @fishmaster/db` from repo root. |
 | **Invalid hook call / duplicate React** | Run `npm install --ignore-scripts --legacy-peer-deps` from repo root, then `npx expo start -c`. |
+| **Second device: failed to download remote update** | Run `npx expo start --tunnel -c` and scan the new QR code. |
 
 ## Production
 
