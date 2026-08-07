@@ -28,14 +28,39 @@ enum SubscriptionStatus {
 
 enum ContentType {
   advert
+  article
   education
   information
+  picture
+  video
+}
+
+enum CultureSystem {
+  extensive
+  semi_intensive
+  intensive
+}
+
+enum MiscCostCategory {
+  salary
+  transport
+  chemicals
+  repairs
+  other
 }
 
 model User {
   id                 String             @id @default(cuid())
   email              String             @unique
   name               String
+  surname            String?
+  gender             String?
+  ageRange           String?
+  phone              String?
+  postcode           String?
+  lga                String?
+  state              String?
+  country            String?
   passwordHash       String?
   role               UserRole           @default(member)
   subscriptionTier   SubscriptionTier   @default(basic)
@@ -44,7 +69,21 @@ model User {
   stripeSubscriptionId String?
   farms              Farm[]
   posts              ContentPost[]
+  messages           MemberMessage[]
   createdAt          DateTime           @default(now())
+}
+
+model MemberMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  pondId    String?
+  pondLabel String?
+  title     String
+  body      String
+  reportNum Int?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
 }
 
 model ContentPost {
@@ -65,11 +104,19 @@ model Farm {
   userId    String
   user      User     @relation(fields: [userId], references: [id])
   name      String
+  phone     String?
   location  String
+  postcode  String?
+  lga       String?
+  sizeSqM   Float?
+  totalPonds Int?
+  latitude  Float?
+  longitude Float?
   city      String
   state     String
   country   String
   ponds     Pond[]
+  marketProducts MarketProduct[]
   createdAt DateTime @default(now())
 }
 
@@ -79,6 +126,7 @@ model Pond {
   farm     Farm         @relation(fields: [farmId], references: [id])
   name     String
   number   Int
+  pondType String?
   lengthM  Float
   widthM   Float
   depthM   Float
@@ -90,15 +138,32 @@ model StockCycle {
   id                   String              @id @default(cuid())
   pondId               String
   pond                 Pond                @relation(fields: [pondId], references: [id])
+  fishSpecies          String?
+  cultureSystem        CultureSystem?
   quantityStocked      Int
   averageWeightAtStockingG Float
   fingerlingPrice      Float
   stockingDate         DateTime
+  proposedSalesDate    DateTime?
+  feedName             String?
+  feedType             String?
+  feedMaker            String?
+  feedBags             Int?
   desiredCrudeProteinPct Float
   desiredFeedQuantityKg  Float
+  waterSource          String?
+  initialPh            Float?
+  initialDissolvedOxygenMgL Float?
   mortalityLogs        DailyMortalityLog[]
   feedLogs             DailyFeedLog[]
   waterLogs            WaterParameterLog[]
+  powerLogs            DailyPowerLog[]
+  feedBrands           FeedBrandMonth[]
+  salesLogs            FishSaleLog[]
+  weightSamples        ActualWeightSample[]
+  operationsLogs       DailyOperationsLog[]
+  miscCostLogs         MiscCostLog[]
+  feedIngredientCosts  FeedIngredientCost[]
   createdAt            DateTime            @default(now())
 }
 
@@ -137,4 +202,146 @@ model WaterParameterLog {
   createdAt         DateTime   @default(now())
 
   @@unique([stockCycleId, date])
+}
+
+model DailyPowerLog {
+  id             String     @id @default(cuid())
+  stockCycleId   String
+  stockCycle     StockCycle @relation(fields: [stockCycleId], references: [id])
+  date           DateTime
+  electricityKwh Float?
+  dieselLiters   Float?
+  petrolLiters   Float?
+  solarKwh       Float?
+  notes          String?
+  createdAt      DateTime   @default(now())
+
+  @@unique([stockCycleId, date])
+}
+
+model FeedBrandMonth {
+  id              String     @id @default(cuid())
+  stockCycleId    String
+  stockCycle      StockCycle @relation(fields: [stockCycleId], references: [id])
+  month           Int
+  brand           String
+  feedSizeMm      Float
+  costPerBag      Float
+  crudeProteinPct Float
+  createdAt       DateTime   @default(now())
+
+  @@unique([stockCycleId, month])
+}
+
+model FishSaleLog {
+  id           String     @id @default(cuid())
+  stockCycleId String
+  stockCycle   StockCycle @relation(fields: [stockCycleId], references: [id])
+  date         DateTime
+  quantitySold Int
+  avgWeightG   Float?
+  totalRevenue Float?
+  customerName String?
+  notes        String?
+  createdAt    DateTime   @default(now())
+}
+
+model ActualWeightSample {
+  id             String     @id @default(cuid())
+  stockCycleId   String
+  stockCycle     StockCycle @relation(fields: [stockCycleId], references: [id])
+  date           DateTime
+  averageWeightG Float
+  sampleCount    Int?
+  createdAt      DateTime   @default(now())
+
+  @@unique([stockCycleId, date])
+}
+
+model MiscCostLog {
+  id           String           @id @default(cuid())
+  stockCycleId String
+  stockCycle   StockCycle       @relation(fields: [stockCycleId], references: [id])
+  date         DateTime
+  category     MiscCostCategory
+  amount       Float
+  notes        String?
+  createdAt    DateTime         @default(now())
+}
+
+model FeedIngredientCost {
+  id             String     @id @default(cuid())
+  stockCycleId   String
+  stockCycle     StockCycle @relation(fields: [stockCycleId], references: [id])
+  ingredientName String
+  costPerKg      Float
+  month          Int?
+  createdAt      DateTime   @default(now())
+
+  @@unique([stockCycleId, ingredientName])
+}
+
+model DailyOperationsLog {
+  id             String     @id @default(cuid())
+  stockCycleId   String
+  stockCycle     StockCycle @relation(fields: [stockCycleId], references: [id])
+  date           DateTime
+  medication     Boolean    @default(false)
+  grading        Boolean    @default(false)
+  netWash        Boolean    @default(false)
+  pondCleaning   Boolean    @default(false)
+  aerationCheck  Boolean    @default(false)
+  waterExchange  Boolean    @default(false)
+  sampling       Boolean    @default(false)
+  notes          String?
+  createdAt      DateTime   @default(now())
+
+  @@unique([stockCycleId, date])
+}
+
+enum FoodClass {
+  protein
+  carbohydrate
+  others
+}
+
+/** Global feed formulation ingredients (admin Config) */
+model GlobalIngredient {
+  id              String    @id @default(cuid())
+  name            String    @unique
+  crudeProteinPct Float
+  inclusionRatio  Float
+  composition     String?
+  foodClass       FoodClass
+}
+
+/** Global FCR / % body-weight coefficients for months 1–6 */
+model FcrMonthConfig {
+  month         Int   @id
+  bodyWeightPct Float
+  fcr           Float
+}
+
+model MarketCategory {
+  id          String          @id @default(cuid())
+  title       String
+  description String?
+  imageUrl    String?
+  products    MarketProduct[]
+  createdAt   DateTime        @default(now())
+}
+
+model MarketProduct {
+  id          String          @id @default(cuid())
+  farmId      String
+  farm        Farm            @relation(fields: [farmId], references: [id])
+  categoryId  String?
+  category    MarketCategory? @relation(fields: [categoryId], references: [id])
+  name        String
+  price       Float
+  quantity    Float
+  imageUrl    String?
+  description String?
+  sold        Boolean         @default(false)
+  createdAt   DateTime        @default(now())
 }

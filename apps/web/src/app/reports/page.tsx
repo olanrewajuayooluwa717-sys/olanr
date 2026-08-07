@@ -20,6 +20,7 @@ export default function ReportsPage() {
   return (
     <main style={{ maxWidth: 960, margin: '0 auto', padding: '2rem' }}>
       <h1 style={{ color: '#0d4f6e' }}>All 21 Reports</h1>
+      <p style={{ color: '#555' }}>Included free with your monthly Fishmaster subscription — no per-report payment.</p>
       {error && <p style={{ color: '#b45309' }}>{error}</p>}
       {report && <ReportsDashboard report={report} />}
     </main>

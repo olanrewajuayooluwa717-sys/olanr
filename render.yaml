@@ -1,5 +1,22 @@
-# Render Blueprint — API + PostgreSQL
+# Render Blueprint — Fishmaster API
 # Deploy: https://dashboard.render.com/blueprints → New Blueprint Instance → connect GitHub repo
+#
+# ── Database options ──────────────────────────────────────────────────────────
+# Option A (default below): Render PostgreSQL — DATABASE_URL wired via fromDatabase.
+# Option B (Neon / external Postgres):
+#   1. Comment out or delete the `databases:` block at the bottom.
+#   2. Remove the `fromDatabase` block under DATABASE_URL.
+#   3. In Render dashboard → fishmaster-api → Environment, set DATABASE_URL manually
+#      to your Neon connection string (use the pooled URL for serverless workloads).
+#   4. Run schema once: npm run db:push -w @fishmaster/db (locally or via shell).
+#
+# ── Schema migrations ─────────────────────────────────────────────────────────
+# db:push runs in buildCommand (applies Prisma schema on every deploy).
+# Tradeoff: simple for early prod; for strict migrations switch to prisma migrate deploy.
+#
+# ── Seeding ───────────────────────────────────────────────────────────────────
+# initialDeployHook runs db:seed-if-enabled — seed ONLY when SEED_ON_DEPLOY=true.
+# First deploy: set SEED_ON_DEPLOY=true once, redeploy, then set back to false.
 
 services:
   - type: web
@@ -8,19 +25,31 @@ services:
     plan: free
     buildCommand: npm install --legacy-peer-deps --ignore-scripts && npm run build:api && npm run db:push -w @fishmaster/db
     startCommand: npm run start:api
-    initialDeployHook: npm run db:seed -w @fishmaster/db
+    initialDeployHook: npm run db:seed-if-enabled -w @fishmaster/db
     healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
         value: "22"
+      - key: NODE_ENV
+        value: production
       - key: JWT_SECRET
         generateValue: true
       - key: WEB_URL
+        sync: false
+      - key: CORS_ORIGINS
         sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
+      - key: ELECTRICITY_RATE_NGN
+        value: "85"
+      - key: DIESEL_RATE_NGN
+        value: "1200"
+      - key: PETROL_RATE_NGN
+        value: "1100"
+      - key: SEED_ON_DEPLOY
+        value: "false"
       - key: DATABASE_URL
         fromDatabase:
           name: fishmaster-db

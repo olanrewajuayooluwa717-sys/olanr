@@ -11,6 +11,9 @@ export default function RootLayout() {
         <Stack.Screen name="login" options={{ title: 'Login' }} />
         <Stack.Screen name="register" options={{ title: 'Register' }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="content/[type]" options={{ title: 'Content' }} />
+        <Stack.Screen name="messages" options={{ title: 'Messages' }} />
+        <Stack.Screen name="economics" options={{ title: 'Economics' }} />
       </Stack>
     </>
   );

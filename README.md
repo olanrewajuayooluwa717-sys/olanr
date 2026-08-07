@@ -13,7 +13,7 @@ fishmaster/
 ├── packages/
 │   ├── calc-engine/  # Pure business logic — ported from App Fishmaster.xlsx
 │   ├── shared-types/ # Shared TypeScript types
-│   └── db/           # Prisma + SQLite (local dev)
+│   └── db/           # Prisma + PostgreSQL
 ```
 
 ## Prerequisites
@@ -41,12 +41,13 @@ npm.cmd run dev:mobile # Expo — see apps/mobile/MOBILE.md
 - [x] Calculation engine from Excel (21 reports)
 - [x] Regression tests vs workbook sample data
 - [x] Express API + JWT auth + RBAC
-- [x] SQLite + Prisma + seed data
+- [x] PostgreSQL + Prisma + seed data
 - [x] Next.js web (dashboard, reports, admin, Stripe checkout)
 - [x] Expo mobile (dashboard, all 21 reports, daily log, subscriptions)
 - [x] Stripe subscriptions (£1.50 / £2.50 / £6.00)
 - [x] GitHub + CI
-- [ ] **Production deploy** — see [DEPLOY.md](./DEPLOY.md) (Render + Vercel + Neon)
+- [x] **Production deploy configs** — Render + Vercel + EAS + Neon option ([DEPLOY.md](./DEPLOY.md))
+- [ ] **Production redeploy** — push latest code and configure env vars ([checklist](./docs/PRODUCTION_CHECKLIST.md))
 - [x] Water parameter logging (Phase 2)
 - [ ] GPS farm directory, photo uploads, multi-species
 
@@ -59,7 +60,20 @@ npm.cmd run dev:mobile # Expo — see apps/mobile/MOBILE.md
 
 ## Key design decisions
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) · Mobile: [apps/mobile/MOBILE.md](./apps/mobile/MOBILE.md) · Deploy: [DEPLOY.md](./DEPLOY.md) · Stripe: [STRIPE.md](./STRIPE.md)
+See [ARCHITECTURE.md](./ARCHITECTURE.md) · Mobile: [apps/mobile/MOBILE.md](./apps/mobile/MOBILE.md) · Deploy: [DEPLOY.md](./DEPLOY.md) · Checklist: [docs/PRODUCTION_CHECKLIST.md](./docs/PRODUCTION_CHECKLIST.md) · Security: [docs/SECURITY.md](./docs/SECURITY.md) · Stripe: [STRIPE.md](./STRIPE.md)
+
+## Production
+
+| Component | Host | Config |
+|-----------|------|--------|
+| API | Render | `render.yaml` |
+| Database | Render Postgres or Neon | `DATABASE_URL` |
+| Web | Vercel | `apps/web/vercel.json` |
+| Mobile | EAS Build | `apps/mobile/eas.json` |
+
+Before deploy: `npx tsx scripts/verify-production-config.ts`
+
+Full guide: [DEPLOY.md](./DEPLOY.md)
 
 ## Excel reference
 

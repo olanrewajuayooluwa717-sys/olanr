@@ -5,11 +5,16 @@ export function getToken(): string | null {
   return localStorage.getItem('fishmaster_token');
 }
 
-export function setAuth(token: string, cycleId?: string, user?: { role?: string; name?: string }) {
+export function setAuth(
+  token: string,
+  cycleId?: string,
+  user?: { role?: string; name?: string; email?: string },
+) {
   localStorage.setItem('fishmaster_token', token);
   if (cycleId) localStorage.setItem('fishmaster_cycle_id', cycleId);
   if (user?.role) localStorage.setItem('fishmaster_role', user.role);
   if (user?.name) localStorage.setItem('fishmaster_name', user.name);
+  if (user?.email) localStorage.setItem('fishmaster_email', user.email);
 }
 
 export function clearAuth() {
@@ -17,11 +22,22 @@ export function clearAuth() {
   localStorage.removeItem('fishmaster_cycle_id');
   localStorage.removeItem('fishmaster_role');
   localStorage.removeItem('fishmaster_name');
+  localStorage.removeItem('fishmaster_email');
 }
 
 export function getRole(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('fishmaster_role');
+}
+
+export function getEmail(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('fishmaster_email');
+}
+
+export function getName(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('fishmaster_name');
 }
 
 export async function apiFetch(path: string, options: RequestInit = {}) {
@@ -104,4 +120,90 @@ export async function login(email: string, password: string) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error ?? 'Login failed');
   return data as { token: string; user: { id: string; name: string; email: string; role: string } };
+}
+
+export type CycleSummary = {
+  id: string;
+  pond: { name: string; number: number; farm: { name: string } };
+};
+
+export async function fetchUserCycles(): Promise<CycleSummary[]> {
+  if (!getToken()) return [];
+  const res = await fetch(`${API_URL}/api/cycles`, { headers: authHeaders() });
+  const data = await res.json();
+  if (!res.ok || !Array.isArray(data)) return [];
+  return data;
+}
+
+export function setCycleId(id: string) {
+  localStorage.setItem('fishmaster_cycle_id', id);
+}
+
+export async function fetchDashboard(cycleId: string) {
+  const res = await fetch(`${API_URL}/api/cycles/${cycleId}/dashboard`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? 'Failed to load dashboard');
+  return data;
+}
+
+export type EconomicsSummary = {
+  cycleId: string;
+  pondName: string;
+  cumulativeFeedCost: number | null;
+  powerCostEstimate: number;
+  powerRates: { electricityPerKwh: number; dieselPerLiter: number; petrolPerLiter: number };
+  miscCostsByCategory: Record<string, number>;
+  miscCostsTotal: number;
+  salesRevenue: number;
+  totalCosts: number;
+  profitLoss: number;
+};
+
+export type FishSale = {
+  id: string;
+  date: string;
+  quantitySold: number;
+  avgWeightG: number | null;
+  totalRevenue: number | null;
+  customerName: string | null;
+  notes: string | null;
+};
+
+export type FeedIngredient = {
+  id: string;
+  ingredientName: string;
+  costPerKg: number;
+  month: number | null;
+};
+
+export async function fetchEconomics(cycleId: string): Promise<EconomicsSummary> {
+  return apiFetch(`/api/cycles/${cycleId}/economics`);
+}
+
+export async function fetchSales(cycleId: string): Promise<FishSale[]> {
+  return apiFetch(`/api/cycles/${cycleId}/sales`);
+}
+
+export async function fetchFeedIngredients(cycleId: string): Promise<FeedIngredient[]> {
+  return apiFetch(`/api/cycles/${cycleId}/feed-ingredients`);
+}
+
+export async function saveFeedIngredients(
+  cycleId: string,
+  items: { ingredientName: string; costPerKg: number; month?: number }[],
+) {
+  return apiFetch(`/api/cycles/${cycleId}/feed-ingredients`, {
+    method: 'PUT',
+    body: JSON.stringify(items),
+  });
+}
+
+export async function addMiscCost(
+  cycleId: string,
+  body: { date: string; category: string; amount: number; notes?: string },
+) {
+  return apiFetch(`/api/cycles/${cycleId}/misc-costs`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 }

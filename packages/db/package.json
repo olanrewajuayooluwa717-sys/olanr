@@ -9,6 +9,7 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed-if-enabled": "tsx scripts/seed-if-enabled.ts",
     "db:setup": "prisma generate && prisma db push && tsx prisma/seed.ts && tsc",
     "db:release": "prisma db push && tsx prisma/seed.ts",
     "postinstall": "prisma generate"

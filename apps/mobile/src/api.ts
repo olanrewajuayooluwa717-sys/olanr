@@ -30,6 +30,22 @@ export async function getCycleId() {
   return AsyncStorage.getItem(KEYS.cycleId);
 }
 
+export async function setCycleId(id: string) {
+  await AsyncStorage.setItem(KEYS.cycleId, id);
+}
+
+export type CycleSummary = {
+  id: string;
+  pond: { name: string; number: number; farm: { name: string } };
+};
+
+export async function fetchUserCycles(): Promise<CycleSummary[]> {
+  const res = await fetch(`${API_URL}/api/cycles`, { headers: await authHeaders() });
+  const data = await res.json();
+  if (!res.ok || !Array.isArray(data)) return [];
+  return data;
+}
+
 export async function authHeaders() {
   const token = await getToken();
   return {
@@ -77,6 +93,69 @@ export async function registerFarm(body: Record<string, unknown>) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error ?? 'Registration failed');
   return data as { cycleId: string; token: string };
+}
+
+export async function fetchDashboard(cycleId?: string | null) {
+  const id = cycleId ?? (await getCycleId());
+  if (!id) throw new Error('No pond selected');
+  const res = await fetch(`${API_URL}/api/cycles/${id}/dashboard`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? 'Failed to load dashboard');
+  return data as {
+    pondName: string;
+    dayInCulture: number;
+    monthName: string;
+    todayExpectedFeedKg: number | null;
+    yesterdayExpectedFeedKg: number | null;
+    todayMorningFeedKg: number | null;
+    todayEveningFeedKg: number | null;
+    expectedAvgWeightG: number | null;
+    actualAvgWeightG: number | null;
+    fishOnHand: number | null;
+    month1FeedCost: number | null;
+    todayActualFeedKg: number | null;
+    cumulativeFeedCost: number | null;
+    totalActualFeedKg: number | null;
+    averageFcr: number;
+    pondCleaning: {
+      intervalDays: number;
+      daysUntilNextCleaning: number;
+      nextCleaningDayInCulture: number;
+      dueToday: boolean;
+    };
+  };
+}
+
+export type EconomicsSummary = {
+  cycleId: string;
+  pondName: string;
+  cumulativeFeedCost: number | null;
+  powerCostEstimate: number;
+  miscCostsTotal: number;
+  salesRevenue: number;
+  totalCosts: number;
+  profitLoss: number;
+};
+
+export type FishSale = {
+  id: string;
+  date: string;
+  quantitySold: number;
+  avgWeightG: number | null;
+  totalRevenue: number | null;
+  customerName: string | null;
+};
+
+export async function fetchEconomics(cycleId?: string | null): Promise<EconomicsSummary> {
+  const id = cycleId ?? (await getCycleId());
+  if (!id) throw new Error('No pond selected');
+  return apiFetch(`/api/cycles/${id}/economics`);
+}
+
+export async function fetchSales(cycleId?: string | null): Promise<FishSale[]> {
+  const id = cycleId ?? (await getCycleId());
+  if (!id) throw new Error('No pond selected');
+  return apiFetch(`/api/cycles/${id}/sales`);
 }
 
 export async function fetchCycleReport(cycleId?: string | null) {

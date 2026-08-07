@@ -6,19 +6,35 @@
     "orientation": "portrait",
     "scheme": "fishmaster",
     "userInterfaceStyle": "light",
+    "privacy": "public",
     "splash": {
       "backgroundColor": "#0d4f6e"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "app.fishmaster.mobile"
+      "bundleIdentifier": "app.fishmaster.mobile",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Optional farm GPS coordinates for your pond registration."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#0d4f6e"
       },
-      "package": "app.fishmaster.mobile"
+      "package": "app.fishmaster.mobile",
+      "versionCode": 1,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
     },
-    "plugins": ["expo-router"]
+    "plugins": ["expo-router"],
+    "extra": {
+      "eas": {
+        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+      }
+    },
+    "owner": "REPLACE_WITH_EXPO_USERNAME"
   }
 }

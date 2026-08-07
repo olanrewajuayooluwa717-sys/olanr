@@ -1,15 +1,29 @@
-import type { StockCycleInput } from '@fishmaster/shared-types';
-import type { Farm, Pond, StockCycle, DailyMortalityLog, DailyFeedLog, User } from '@fishmaster/db';
+import type { StockCycleInput, FeedBrandMonth } from '@fishmaster/shared-types';
+import type {
+  Farm, Pond, StockCycle, DailyMortalityLog, DailyFeedLog,
+  FeedBrandMonth as DbFeedBrandMonth,
+} from '@fishmaster/db';
 
 type CycleWithRelations = StockCycle & {
-  pond: Pond & { farm: Farm & { user: User } };
+  pond: Pond & { farm: Farm & { user: { name: string } } };
   mortalityLogs: DailyMortalityLog[];
   feedLogs: DailyFeedLog[];
+  feedBrands?: DbFeedBrandMonth[];
 };
 
 export function toStockCycleInput(cycle: CycleWithRelations): StockCycleInput {
   const { pond } = cycle;
   const { farm } = pond;
+
+  const feedBrands: FeedBrandMonth[] | undefined = cycle.feedBrands?.length
+    ? cycle.feedBrands.map((b) => ({
+        month: b.month,
+        brand: b.brand,
+        feedSizeMm: b.feedSizeMm,
+        costPerBag: b.costPerBag,
+        crudeProteinPct: b.crudeProteinPct,
+      }))
+    : undefined;
 
   return {
     farmerName: farm.user.name,
@@ -29,5 +43,6 @@ export function toStockCycleInput(cycle: CycleWithRelations): StockCycleInput {
     desiredFeedQuantityKg: cycle.desiredFeedQuantityKg,
     dailyMortality: cycle.mortalityLogs.map((m) => ({ date: m.date, mortality: m.count })),
     dailyFeedActuals: cycle.feedLogs.map((f) => ({ date: f.date, actualFeedKg: f.actualKg })),
+    feedBrands,
   };
 }

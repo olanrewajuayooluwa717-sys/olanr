@@ -1,5 +1,11 @@
 /** Shared domain types used across API, web, and calc-engine */
 
+export * from './catalog';
+export * from './registration-options';
+export * from './economics';
+export * from './ingredients';
+export * from './marketplace';
+
 export type SubscriptionTier = 'basic' | 'standard' | 'premium';
 
 export type UserRole = 'member' | 'manager' | 'super_admin';
@@ -14,18 +20,37 @@ export interface PondDimensions {
 
 export interface RegistrationInput {
   farmerName: string;
+  surname?: string;
+  gender?: string;
+  ageRange?: string;
+  phone?: string;
+  postcode?: string;
+  lga?: string;
   farmName: string;
+  farmPhone?: string;
   location: string;
+  farmPostcode?: string;
+  farmLga?: string;
+  farmSizeSqM?: number;
+  totalPonds?: number;
   city: string;
   state: string;
   country: string;
   pondName: string;
   pondNumber: number;
+  pondType?: string;
   dimensions: PondDimensions;
+  cultureSystem?: StockingIntensity;
+  fishSpecies?: string;
   averageWeightAtStockingG: number;
   fingerlingPrice: number;
   quantityStocked: number;
   stockingDate: Date;
+  proposedSalesDate?: Date;
+  feedName?: string;
+  feedType?: string;
+  feedMaker?: string;
+  feedBags?: number;
   desiredCrudeProteinPct: number;
   desiredFeedQuantityKg: number;
 }

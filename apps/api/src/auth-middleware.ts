@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { config } from './config';
 
-const JWT_SECRET = process.env.JWT_SECRET ?? 'fishmaster-dev-secret-change-in-prod';
+const JWT_SECRET = config.jwtSecret;
 
 export interface AuthPayload {
   userId: string;
