@@ -1,18 +1,18 @@
 import { useCallback, useState } from 'react';
-import { ScrollView, View, Text, StyleSheet, RefreshControl, Pressable } from 'react-native';
+import { ScrollView, View, Text, StyleSheet, RefreshControl, Pressable, Image } from 'react-native';
 import { router } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
 import type { StockCycleReport } from '@fishmaster/shared-types';
 import { TIER_LABELS } from '@fishmaster/shared-types';
 import {
-  API_URL, fetchCycleReport, fetchDashboard, fetchEconomics, getCycleId, setCycleId, authHeaders, fetchUserCycles,
+  API_URL, fetchCycleReport, fetchDashboard, fetchEconomics, getCycleId, getRole, setCycleId, authHeaders, fetchUserCycles, isVideoMedia, mediaSrc,
   type EconomicsSummary,
 } from '../../src/api';
 import { HomeIconGrid } from '../../src/HomeIconGrid';
 import { PondSwitcher } from '../../src/PondSwitcher';
 import { colors } from '../../src/theme';
 
-type NewsPost = { id: string; type: string; title: string; body: string };
+type NewsPost = { id: string; type: string; title: string; body: string; mediaUrl?: string | null; placements?: string[] };
 type Dash = Awaited<ReturnType<typeof fetchDashboard>>;
 
 export default function DashboardScreen() {
@@ -25,24 +25,28 @@ export default function DashboardScreen() {
   const [sub, setSub] = useState<{ tierLabel: string; status: string } | null>(null);
   const [econ, setEcon] = useState<EconomicsSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [canSeeFullEconomics, setCanSeeFullEconomics] = useState(false);
 
   const load = useCallback(async (overrideCycleId?: string | null) => {
     try {
+      const role = await getRole();
+      const staff = role === 'super_admin' || role === 'manager';
+      setCanSeeFullEconomics(staff);
       const id = overrideCycleId ?? (await getCycleId());
       setCycleIdState(id);
       const [data, dashboard, economics] = await Promise.all([
         fetchCycleReport(id),
         fetchDashboard(id).catch(() => null),
-        fetchEconomics(id).catch(() => null),
+        staff ? fetchEconomics(id).catch(() => null) : Promise.resolve(null),
       ]);
       setReport(data.report);
       setPondName(data.pondName);
       setCycleIdState(data.cycleId);
       if (dashboard) setDash(dashboard);
-      if (economics) setEcon(economics);
+      setEcon(economics);
       setError(null);
       const [content, status, cycles] = await Promise.all([
-        fetch(`${API_URL}/api/content`).then((r) => r.json()),
+        fetch(`${API_URL}/api/content`, { headers: await authHeaders() }).then((r) => r.json()).catch(() => []),
         fetch(`${API_URL}/api/billing/status`, { headers: await authHeaders() }).then((r) => r.json()).catch(() => null),
         fetchUserCycles(),
       ]);
@@ -110,7 +114,7 @@ export default function DashboardScreen() {
             {dash.cumulativeFeedCost != null && (
               <Stat label="Feed cost to date" value={`₦${dash.cumulativeFeedCost.toFixed(0)}`} />
             )}
-            {dash.averageFcr != null && (
+            {canSeeFullEconomics && dash.averageFcr != null && (
               <Stat label="FCR" value={dash.averageFcr.toFixed(2)} />
             )}
           </View>
@@ -124,7 +128,7 @@ export default function DashboardScreen() {
         </View>
       )}
 
-      {econ && (
+      {canSeeFullEconomics && econ && (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Economics snapshot</Text>
           <Text style={styles.feedSub}>
@@ -139,17 +143,19 @@ export default function DashboardScreen() {
         </View>
       )}
 
-      {news.filter((n) => n.type === 'advert').length > 0 && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>📢 Adverts</Text>
-          {news.filter((n) => n.type === 'advert').slice(0, 2).map((n) => (
-            <View key={n.id} style={styles.newsItem}>
-              <Text style={styles.newsTitle}>{n.title}</Text>
-              <Text style={styles.newsBody} numberOfLines={3}>{n.body}</Text>
-            </View>
-          ))}
+      {news.filter((n) => n.type === 'advert' && (!n.placements?.length || n.placements.includes('home'))).slice(0, 1).map((n) => (
+        <View key={n.id} style={styles.card}>
+          <Text style={styles.feedSub}>Sponsored</Text>
+          <Text style={styles.newsTitle}>{n.title}</Text>
+          {n.mediaUrl && !isVideoMedia(n.mediaUrl) && (
+            <Image source={{ uri: mediaSrc(n.mediaUrl) }} style={{ width: '100%', height: 160, borderRadius: 8, marginTop: 8 }} resizeMode="cover" />
+          )}
+          {n.mediaUrl && isVideoMedia(n.mediaUrl) && (
+            <Text style={styles.newsBody}>Video ad</Text>
+          )}
+          <Text style={styles.newsBody} numberOfLines={3}>{n.body}</Text>
         </View>
-      )}
+      ))}
 
       <HomeIconGrid />
 
@@ -157,7 +163,7 @@ export default function DashboardScreen() {
         <View style={styles.grid}>
           <Stat label="Pond volume" value={`${report.advisedStocking.pondVolumeLiters.toFixed(0)} L`} />
           <Stat label="Month 1 feed" value={`${m0?.monthlyFeedKg.toFixed(0)} kg`} />
-          <Stat label="Avg FCR" value={report.averageFcr.toFixed(2)} />
+          {canSeeFullEconomics && <Stat label="Avg FCR" value={report.averageFcr.toFixed(2)} />}
           <Stat label="6-mo feed" value={`${report.cycleFeedKg.months6.toFixed(0)} kg`} />
         </View>
       )}

@@ -29,8 +29,21 @@ export default function LoginPage() {
   };
 
   return (
-    <main style={{ maxWidth: 420, margin: '0 auto', padding: '2.5rem 1.25rem' }}>
-      <h1 style={{ color: '#0d4f6e', margin: '0 0 0.35rem' }}>Welcome back</h1>
+    <main
+      style={{
+        minHeight: '100dvh',
+        boxSizing: 'border-box',
+        width: '100%',
+        maxWidth: 440,
+        margin: '0 auto',
+        padding: 'max(1.25rem, env(safe-area-inset-top)) 1rem max(1.5rem, env(safe-area-inset-bottom))',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        background: '#f0f7fa',
+      }}
+    >
+      <h1 style={{ color: '#0d4f6e', margin: '0 0 0.35rem', fontSize: '1.6rem' }}>Welcome back</h1>
       <p style={{ color: '#64748b', margin: '0 0 1.25rem', fontSize: '0.95rem' }}>
         Sign in to your farm dashboard, reports, and daily logs.
       </p>

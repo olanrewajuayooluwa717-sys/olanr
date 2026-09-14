@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { ScrollView, View, Text, StyleSheet, RefreshControl } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import {
-  fetchEconomics, fetchSales, getCycleId, type EconomicsSummary, type FishSale,
+  fetchEconomics, fetchSales, getCycleId, getRole, type EconomicsSummary, type FishSale,
 } from '../src/api';
 import { colors } from '../src/theme';
 
@@ -15,9 +15,17 @@ export default function EconomicsScreen() {
   const [summary, setSummary] = useState<EconomicsSummary | null>(null);
   const [sales, setSales] = useState<FishSale[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [allowed, setAllowed] = useState(false);
 
   const load = useCallback(async () => {
     try {
+      const role = await getRole();
+      if (role !== 'super_admin' && role !== 'manager') {
+        setAllowed(false);
+        setError('Full economics is available to staff accounts only.');
+        return;
+      }
+      setAllowed(true);
       const id = await getCycleId();
       if (!id) {
         setError('No pond selected — log in first');
@@ -37,6 +45,13 @@ export default function EconomicsScreen() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  if (!allowed) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bg, padding: 16, justifyContent: 'center' }}>
+        <Text style={{ color: colors.muted }}>{error ?? 'Checking access…'}</Text>
+      </View>
+    );
+  }
   return (
     <ScrollView style={styles.container} refreshControl={<RefreshControl refreshing={false} onRefresh={load} />}>
       {error && <Text style={styles.error}>{error}</Text>}

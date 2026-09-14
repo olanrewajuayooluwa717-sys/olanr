@@ -5,7 +5,14 @@ async function main() {
   const passwordHash = await bcrypt.hash('demo1234', 10);
   const user = await prisma.user.upsert({
     where: { email: 'logunsina@yahoo.com' },
-    update: { passwordHash },
+    update: {
+      passwordHash,
+      categories: ['table_fish_farmer', 'fish_breeder'],
+      estimatedFishOutputYear: '100 tonnes/Annum',
+      state: 'Oyo',
+      country: 'Nigeria',
+      lga: 'Ibadan North',
+    },
     create: {
       email: 'logunsina@yahoo.com',
       name: 'AYOOLUWA OGUNSINA',
@@ -13,6 +20,11 @@ async function main() {
       role: 'member',
       subscriptionTier: 'standard',
       subscriptionStatus: 'active',
+      categories: ['table_fish_farmer', 'fish_breeder'],
+      estimatedFishOutputYear: '100 tonnes/Annum',
+      state: 'Oyo',
+      country: 'Nigeria',
+      lga: 'Ibadan North',
     },
   });
 

@@ -6,8 +6,8 @@ import { usePathname } from 'next/navigation';
 import { clearAuth, getToken, getRole, getEmail } from '../lib/api';
 
 const NAV_LINKS = [
-  { href: '/', label: 'Home', match: (p: string) => p === '/' },
-  { href: '/economics', label: 'Economics', match: (p: string) => p.startsWith('/economics') },
+  { href: '/', label: 'Home', match: (p: string) => p === '/' || p.startsWith('/display') },
+  { href: '/economics', label: 'Economics', match: (p: string) => p.startsWith('/economics'), staffOnly: true },
   { href: '/marketplace', label: 'Marketplace', match: (p: string) => p.startsWith('/marketplace') },
   { href: '/reports', label: 'Reports', match: (p: string) => p.startsWith('/reports') },
   { href: '/messages', label: 'Messages', match: (p: string) => p.startsWith('/messages'), auth: true },
@@ -34,13 +34,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
     window.location.href = '/login';
   };
 
-  if (isAdminRoute) {
+  const isAuthRoute = pathname === '/login' || pathname === '/register' || pathname.startsWith('/forgot-password');
+  if (isAdminRoute || isAuthRoute) {
     return <>{children}</>;
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f0f7fa' }}>
+    <div className="member-main" style={{ minHeight: '100vh', background: '#f0f7fa' }}>
       <nav
+        className="member-nav"
         style={{
           background: '#0d4f6e',
           color: '#fff',
@@ -54,7 +56,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <Link href="/" style={{ color: '#fff', fontWeight: 700, textDecoration: 'none', marginRight: '0.75rem', fontSize: '1.05rem' }}>
           Fishmaster
         </Link>
-        {NAV_LINKS.filter((l) => !('auth' in l && l.auth) || loggedIn).map((link) => {
+        <span className="member-nav-links" style={{ display: 'contents' }}>
+        {NAV_LINKS.filter((l) => {
+          if ('auth' in l && l.auth && !loggedIn) return false;
+          if ('staffOnly' in l && l.staffOnly && !isAdmin) return false;
+          return true;
+        }).map((link) => {
           const active = link.match(pathname);
           return (
             <Link
@@ -74,6 +81,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </Link>
           );
         })}
+        </span>
         {isAdmin && (
           <Link
             href="/admin"
@@ -94,7 +102,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         {loggedIn ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             {email && (
-              <span style={{ fontSize: '0.8rem', color: '#b8d4e3', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span className="member-email" style={{ fontSize: '0.8rem', color: '#b8d4e3', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {email}
               </span>
             )}
@@ -137,8 +145,79 @@ export function Shell({ children }: { children: React.ReactNode }) {
         )}
       </nav>
       {children}
+      <PhoneTabBar pathname={pathname} loggedIn={loggedIn} isAdmin={isAdmin} onLogout={logout} />
     </div>
   );
+}
+
+function PhoneTabBar({
+  pathname,
+  loggedIn,
+  isAdmin,
+  onLogout,
+}: {
+  pathname: string;
+  loggedIn: boolean;
+  isAdmin: boolean;
+  onLogout: () => void;
+}) {
+  const [more, setMore] = useState(false);
+  const moreActive = pathname.startsWith('/messages') || pathname.startsWith('/subscribe') || pathname.startsWith('/economics') || pathname.startsWith('/reports');
+  const tabs = [
+    { href: '/', label: 'Home', icon: 'home', match: pathname === '/' || pathname.startsWith('/display') },
+    { href: '/content/video', label: 'Videos', icon: 'video', match: pathname.startsWith('/content/video') },
+    { href: '/marketplace', label: 'Market', icon: 'market', match: pathname.startsWith('/marketplace') },
+  ];
+
+  return (
+    <>
+      {more && (
+        <button type="button" className="phone-more-backdrop" aria-label="Close menu" onClick={() => setMore(false)} />
+      )}
+      {more && (
+        <div className="phone-more" role="menu">
+          {loggedIn && <Link href="/messages" onClick={() => setMore(false)}>Messages</Link>}
+          <Link href="/reports" onClick={() => setMore(false)}>Reports</Link>
+          <Link href="/subscribe" onClick={() => setMore(false)}>Plans</Link>
+          {isAdmin && <Link href="/economics" onClick={() => setMore(false)}>Economics</Link>}
+          {isAdmin && <Link href="/admin" onClick={() => setMore(false)}>Admin</Link>}
+          {loggedIn && (
+            <button type="button" onClick={onLogout}>Log out</button>
+          )}
+        </div>
+      )}
+      <nav className="member-bottom" aria-label="App">
+        {tabs.map((tab) => (
+          <Link key={tab.href} href={tab.href} className={tab.match ? 'is-active' : undefined}>
+            <TabIcon name={tab.icon} />
+            <span>{tab.label}</span>
+          </Link>
+        ))}
+        <button
+          type="button"
+          className={more || moreActive ? 'is-active' : undefined}
+          onClick={() => setMore((open) => !open)}
+        >
+          <TabIcon name="more" />
+          <span>More</span>
+        </button>
+      </nav>
+    </>
+  );
+}
+
+function TabIcon({ name }: { name: string }) {
+  const common = { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, 'aria-hidden': true as const };
+  if (name === 'home') {
+    return <svg {...common}><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z" /></svg>;
+  }
+  if (name === 'market') {
+    return <svg {...common}><path d="M6 7h12l-1 13H7L6 7z" /><path d="M9 7a3 3 0 0 1 6 0" /></svg>;
+  }
+  if (name === 'video') {
+    return <svg {...common}><rect x="3" y="6" width="13" height="12" rx="2" /><path d="m16 10 5-2v8l-5-2z" /></svg>;
+  }
+  return <svg {...common}><circle cx="6" cy="12" r="1.2" fill="currentColor" /><circle cx="12" cy="12" r="1.2" fill="currentColor" /><circle cx="18" cy="12" r="1.2" fill="currentColor" /></svg>;
 }
 
 export function Card({ title, children, subtitle }: { title: string; children: React.ReactNode; subtitle?: string }) {
@@ -183,14 +262,16 @@ export const btnStyle: React.CSSProperties = {
   color: '#fff',
   border: 'none',
   borderRadius: 6,
-  padding: '0.5rem 1rem',
+  padding: '0.65rem 1rem',
+  minHeight: 44,
   cursor: 'pointer',
-  fontSize: '0.9rem',
+  fontSize: '1rem',
 };
 
 export const inputStyle: React.CSSProperties = {
-  padding: '0.45rem 0.65rem',
+  padding: '0.65rem 0.75rem',
   borderRadius: 6,
   border: '1px solid #cbd5e1',
-  fontSize: '0.9rem',
+  fontSize: '16px',
+  minHeight: 44,
 };

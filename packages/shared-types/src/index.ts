@@ -1,6 +1,7 @@
 /** Shared domain types used across API, web, and calc-engine */
 
 export * from './catalog';
+export * from './countries';
 export * from './registration-options';
 export * from './economics';
 export * from './ingredients';
@@ -10,7 +11,7 @@ export type SubscriptionTier = 'basic' | 'standard' | 'premium';
 
 export type UserRole = 'member' | 'manager' | 'super_admin';
 
-export type StockingIntensity = 'extensive' | 'semi_intensive' | 'intensive';
+export type StockingIntensity = 'extensive' | 'semi_intensive' | 'intensive' | 'ras';
 
 export interface PondDimensions {
   lengthM: number;
@@ -26,21 +27,27 @@ export interface RegistrationInput {
   phone?: string;
   postcode?: string;
   lga?: string;
+  /** One or more MEMBER_CATEGORIES values */
+  categories?: string[];
+  estimatedFishOutputYear?: string;
   farmName: string;
   farmPhone?: string;
   location: string;
   farmPostcode?: string;
   farmLga?: string;
   farmSizeSqM?: number;
+  farmSizeAcres?: string;
   totalPonds?: number;
   city: string;
   state: string;
   country: string;
+  currency?: string;
+  phoneCountryCode?: string;
   pondName: string;
   pondNumber: number;
   pondType?: string;
   dimensions: PondDimensions;
-  cultureSystem?: StockingIntensity;
+  cultureSystem?: StockingIntensity | 'ras';
   fishSpecies?: string;
   averageWeightAtStockingG: number;
   fingerlingPrice: number;

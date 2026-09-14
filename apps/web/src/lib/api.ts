@@ -1,4 +1,18 @@
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+/** Same-origin by default so phones do not call localhost. Next rewrites /api to the local server. */
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
+
+export function isVideoMedia(url: string | null | undefined): boolean {
+  if (!url) return false;
+  return /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url);
+}
+
+/** Uploaded media is stored as /uploads/… on the API. External URLs are left as-is. */
+export function mediaSrc(url: string | null | undefined): string {
+  if (!url) return '';
+  if (/^https?:\/\//i.test(url) || url.startsWith('data:')) return url;
+  if (url.startsWith('/uploads/')) return `${API_URL}${url}`;
+  return url;
+}
 
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -45,8 +59,21 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
     ...options,
     headers: { ...authHeaders(), ...options.headers },
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
+  const raw = await res.text();
+  let data: any = {};
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      if (!res.ok) throw new Error(raw.slice(0, 180) || `Request failed (${res.status})`);
+    }
+  }
+  if (!res.ok) {
+    if (res.status === 413 || raw.includes('PayloadTooLarge') || raw.includes('<!DOCTYPE')) {
+      throw new Error('That file is too large to paste. Use the file picker on the Videos tab (max 80 MB).');
+    }
+    throw new Error(data.error ?? `Request failed (${res.status})`);
+  }
   return data;
 }
 
@@ -85,8 +112,15 @@ export async function fetchCycleReport(cycleId?: string | null) {
   if (!res.ok) throw new Error(`API ${res.status}`);
   const data = await res.json();
   if (data.error) throw new Error(data.error);
-  if (data.report) return { report: data.report, cycleId: data.cycleId as string, pondName: data.pondName as string };
-  return { report: data, cycleId: cycleId ?? null, pondName: 'fishmaster 1' };
+  if (data.report) {
+    return {
+      report: data.report,
+      cycleId: data.cycleId as string,
+      pondName: data.pondName as string,
+      display: (data.display ?? null) as import('../components/AppDisplayPage').DisplayProfile | null,
+    };
+  }
+  return { report: data, cycleId: cycleId ?? null, pondName: 'fishmaster 1', display: null };
 }
 
 export async function fetchReportFallback() {

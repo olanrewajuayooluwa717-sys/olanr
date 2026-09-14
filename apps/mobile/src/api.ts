@@ -1,6 +1,18 @@
 // Use your PC's LAN IP when testing on a physical phone (not localhost)
 export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001';
 
+export function isVideoMedia(url: string | null | undefined): boolean {
+  if (!url) return false;
+  return /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url);
+}
+
+export function mediaSrc(url: string | null | undefined): string {
+  if (!url) return '';
+  if (/^https?:\/\//i.test(url) || url.startsWith('data:')) return url;
+  if (url.startsWith('/uploads/')) return `${API_URL}${url}`;
+  return url;
+}
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const KEYS = {
@@ -28,6 +40,10 @@ export async function clearAuth() {
 
 export async function getCycleId() {
   return AsyncStorage.getItem(KEYS.cycleId);
+}
+
+export async function getRole() {
+  return AsyncStorage.getItem(KEYS.role);
 }
 
 export async function setCycleId(id: string) {

@@ -10,6 +10,7 @@ import {
   fetchFeedIngredients,
   fetchSales,
   fetchUserCycles,
+  getRole,
   getToken,
   saveFeedIngredients,
   setCycleId,
@@ -17,6 +18,7 @@ import {
   type FeedIngredient,
   type FishSale,
 } from '../../lib/api';
+import { useRouter } from 'next/navigation';
 
 function fmt(n: number | null | undefined) {
   if (n == null) return '—';
@@ -24,6 +26,7 @@ function fmt(n: number | null | undefined) {
 }
 
 export default function EconomicsPage() {
+  const router = useRouter();
   const [cycleId, setCycleIdState] = useState<string | null>(null);
   const [ponds, setPonds] = useState<{ id: string; label: string }[]>([]);
   const [summary, setSummary] = useState<EconomicsSummary | null>(null);
@@ -32,6 +35,16 @@ export default function EconomicsPage() {
   const [misc, setMisc] = useState({ date: '', category: 'salary', amount: '', notes: '' });
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [allowed, setAllowed] = useState(false);
+
+  useEffect(() => {
+    const role = getRole();
+    if (role !== 'super_admin' && role !== 'manager') {
+      router.replace('/');
+      return;
+    }
+    setAllowed(true);
+  }, [router]);
 
   const load = async (id: string) => {
     try {
@@ -56,6 +69,7 @@ export default function EconomicsPage() {
   };
 
   useEffect(() => {
+    if (!allowed) return;
     const today = new Date().toISOString().slice(0, 10);
     setMisc((m) => ({ ...m, date: today }));
     if (!getToken()) return;
@@ -71,7 +85,15 @@ export default function EconomicsPage() {
         load(id);
       }
     });
-  }, []);
+  }, [allowed]);
+
+  if (!allowed) {
+    return (
+      <main style={{ maxWidth: 640, margin: '2rem auto', padding: '1rem' }}>
+        <p style={{ color: '#64748b' }}>Full economics is available to staff accounts only.</p>
+      </main>
+    );
+  }
 
   const switchPond = (id: string) => {
     setCycleId(id);

@@ -1,61 +1,209 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ScrollView, Text, TextInput, Pressable, StyleSheet, View, Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import {
   AGE_RANGE_OPTIONS,
+  COUNTRY_OPTIONS,
   CULTURE_SYSTEM_OPTIONS,
+  CURRENCY_OPTIONS,
+  CUSTOM_OPTION_VALUE,
+  ESTIMATED_FISH_OUTPUT_OPTIONS,
+  FARM_SIZE_ACRES_OPTIONS,
   FEED_TYPE_OPTIONS,
   FISH_SPECIES_OPTIONS,
   GENDER_OPTIONS,
+  MEMBER_CATEGORIES,
+  PASSWORD_RULE_HINT,
   POND_TYPE_OPTIONS,
+  REGISTRATION_RANGES,
   WATER_SOURCE_OPTIONS,
+  currencySymbol,
+  validatePassword,
 } from '@fishmaster/shared-types';
 import { registerFarm, setAuth } from '../src/api';
 import { colors } from '../src/theme';
 
 type Step = 1 | 2 | 3;
 
-const initial = {
-  email: '', password: '', farmerName: '', surname: '', gender: '', ageRange: '', phone: '',
-  postcode: '', lga: '', state: '', country: '',
-  farmName: '', farmPhone: '', location: '', farmPostcode: '', farmLga: '', farmSizeSqM: '',
-  totalPonds: '1', latitude: '', longitude: '', city: '',
-  pondName: '', pondNumber: '1', pondType: '', lengthM: '2', widthM: '3', depthM: '1.3',
-  cultureSystem: 'semi_intensive', fishSpecies: 'Catfish',
-  quantityStocked: '2500', averageWeightAtStockingG: '8', fingerlingPrice: '30',
-  stockingDate: new Date().toISOString().slice(0, 10), proposedSalesDate: '',
-  feedName: '', feedType: '', feedMaker: '', feedBags: '', desiredCrudeProteinPct: '38',
-  desiredFeedQuantityKg: '1500',
-  waterSource: '', initialPh: '', initialDissolvedOxygenMgL: '',
+type PondForm = {
+  pondName: string;
+  pondNumber: string;
+  pondType: string;
+  lengthM: string;
+  widthM: string;
+  depthM: string;
+  cultureSystem: string;
+  fishSpecies: string[];
+  fishCustom: string;
+  quantityStocked: string;
+  averageWeightAtStockingG: string;
+  fingerlingPrice: string;
+  stockingDate: string;
+  proposedSalesDate: string;
 };
+
+const emptyPond = (n: number): PondForm => ({
+  pondName: `Pond ${n}`,
+  pondNumber: String(n),
+  pondType: '',
+  lengthM: '2',
+  widthM: '3',
+  depthM: '1.3',
+  cultureSystem: 'semi_intensive',
+  fishSpecies: ['African sharptooth catfish'],
+  fishCustom: '',
+  quantityStocked: '2500',
+  averageWeightAtStockingG: '8',
+  fingerlingPrice: '30',
+  stockingDate: new Date().toISOString().slice(0, 10),
+  proposedSalesDate: '',
+});
 
 export default function RegisterScreen() {
   const [step, setStep] = useState<Step>(1);
-  const [form, setForm] = useState(initial);
+  const [showPassword, setShowPassword] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [farmerName, setFarmerName] = useState('');
+  const [surname, setSurname] = useState('');
+  const [gender, setGender] = useState('');
+  const [ageRange, setAgeRange] = useState('');
+  const [phoneCountryCode, setPhoneCountryCode] = useState('234');
+  const [phone, setPhone] = useState('');
+  const [postcode, setPostcode] = useState('');
+  const [lga, setLga] = useState('');
+  const [state, setState] = useState('');
+  const [country, setCountry] = useState('Nigeria');
+  const [estimatedFishOutputYear, setEstimated] = useState('');
+  const [estimatedCustom, setEstimatedCustom] = useState('');
+  const [categories, setCategories] = useState<string[]>([]);
+  const [farmName, setFarmName] = useState('');
+  const [farmPhone, setFarmPhone] = useState('');
+  const [location, setLocation] = useState('');
+  const [city, setCity] = useState('');
+  const [farmSizeAcres, setFarmSizeAcres] = useState('');
+  const [farmSizeCustom, setFarmSizeCustom] = useState('');
+  const [currency, setCurrency] = useState('NGN');
+  const [ponds, setPonds] = useState<PondForm[]>([emptyPond(1)]);
+  const [feedName, setFeedName] = useState('');
+  const [feedType, setFeedType] = useState('');
+  const [feedMaker, setFeedMaker] = useState('');
+  const [feedBags, setFeedBags] = useState('');
+  const [desiredCrudeProteinPct, setProtein] = useState('38');
+  const [desiredFeedQuantityKg, setFeedQty] = useState('1500');
+  const [waterSource, setWaterSource] = useState('');
+  const [initialPh, setInitialPh] = useState('');
+  const [initialDo, setInitialDo] = useState('');
   const [loading, setLoading] = useState(false);
-  const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const curSym = currencySymbol(currency);
+  const dialCodes = useMemo(() => {
+    const seen = new Set<string>();
+    return COUNTRY_OPTIONS.filter((c) => {
+      if (seen.has(c.dialCode)) return false;
+      seen.add(c.dialCode);
+      return true;
+    }).map((c) => ({ dial: c.dialCode, label: `+${c.dialCode} ${c.name}` }));
+  }, []);
+
+  const toggleCategory = (value: string) => {
+    setCategories((prev) =>
+      prev.includes(value) ? prev.filter((c) => c !== value) : [...prev, value],
+    );
+  };
+
+  const updatePond = (index: number, patch: Partial<PondForm>) => {
+    setPonds((prev) => prev.map((p, i) => (i === index ? { ...p, ...patch } : p)));
+  };
+
+  const toggleFish = (index: number, species: string) => {
+    setPonds((prev) =>
+      prev.map((p, i) => {
+        if (i !== index) return p;
+        const on = p.fishSpecies.includes(species);
+        return {
+          ...p,
+          fishSpecies: on
+            ? p.fishSpecies.filter((s) => s !== species)
+            : [...p.fishSpecies, species].sort((a, b) => a.localeCompare(b)),
+        };
+      }),
+    );
+  };
+
+  const resolve = (value: string, custom: string) =>
+    value === CUSTOM_OPTION_VALUE ? custom.trim() : value;
 
   const submit = async () => {
+    if (categories.length === 0) {
+      Alert.alert('Categories required', 'Select at least one category that describes what you do.');
+      return;
+    }
+    const pwdErr = validatePassword(password);
+    if (pwdErr) {
+      Alert.alert('Password', pwdErr);
+      return;
+    }
+    for (const p of ponds) {
+      if (p.proposedSalesDate && !(p.proposedSalesDate > p.stockingDate)) {
+        Alert.alert('Dates', `Pond ${p.pondNumber}: sales date must be after stocking date.`);
+        return;
+      }
+    }
     setLoading(true);
     try {
       const body = {
-        ...form,
-        pondNumber: Number(form.pondNumber),
-        lengthM: Number(form.lengthM), widthM: Number(form.widthM), depthM: Number(form.depthM),
-        farmSizeSqM: form.farmSizeSqM ? Number(form.farmSizeSqM) : undefined,
-        totalPonds: form.totalPonds ? Number(form.totalPonds) : undefined,
-        latitude: form.latitude ? Number(form.latitude) : undefined,
-        longitude: form.longitude ? Number(form.longitude) : undefined,
-        quantityStocked: Number(form.quantityStocked),
-        averageWeightAtStockingG: Number(form.averageWeightAtStockingG),
-        fingerlingPrice: Number(form.fingerlingPrice),
-        feedBags: form.feedBags ? Number(form.feedBags) : undefined,
-        desiredCrudeProteinPct: Number(form.desiredCrudeProteinPct),
-        desiredFeedQuantityKg: Number(form.desiredFeedQuantityKg),
-        initialPh: form.initialPh ? Number(form.initialPh) : undefined,
-        initialDissolvedOxygenMgL: form.initialDissolvedOxygenMgL ? Number(form.initialDissolvedOxygenMgL) : undefined,
+        email,
+        password,
+        farmerName,
+        surname,
+        gender,
+        ageRange,
+        phone,
+        phoneCountryCode,
+        postcode,
+        lga,
+        state,
+        country,
+        estimatedFishOutputYear: resolve(estimatedFishOutputYear, estimatedCustom),
+        categories,
+        farmName,
+        farmPhone,
+        location,
+        city,
+        farmSizeAcres: resolve(farmSizeAcres, farmSizeCustom),
+        totalPonds: ponds.length,
+        currency,
+        feedName,
+        feedType,
+        feedMaker,
+        feedBags: feedBags ? Number(feedBags) : undefined,
+        desiredCrudeProteinPct: Number(desiredCrudeProteinPct),
+        desiredFeedQuantityKg: Number(desiredFeedQuantityKg),
+        waterSource,
+        initialPh: initialPh ? Number(initialPh) : undefined,
+        initialDissolvedOxygenMgL: initialDo ? Number(initialDo) : undefined,
+        ponds: ponds.map((p) => {
+          const species = [...p.fishSpecies];
+          if (p.fishCustom.trim()) species.push(p.fishCustom.trim());
+          return {
+            pondName: p.pondName,
+            pondNumber: Number(p.pondNumber),
+            pondType: p.pondType,
+            lengthM: Number(p.lengthM),
+            widthM: Number(p.widthM),
+            depthM: Number(p.depthM),
+            cultureSystem: p.cultureSystem,
+            fishSpecies: species,
+            quantityStocked: Number(p.quantityStocked),
+            averageWeightAtStockingG: Number(p.averageWeightAtStockingG),
+            fingerlingPrice: Number(p.fingerlingPrice),
+            stockingDate: p.stockingDate,
+            proposedSalesDate: p.proposedSalesDate || undefined,
+          };
+        }),
       };
       const { cycleId, token } = await registerFarm(body);
       await setAuth(token, cycleId, { role: 'member' });
@@ -70,65 +218,166 @@ export default function RegisterScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
       <Text style={styles.heading}>Register — step {step} of 3</Text>
-      <Text style={styles.sub}>Open to farmers worldwide. Tap options to select.</Text>
+      <Text style={styles.sub}>Tell us who you are and what you do (you can pick more than one).</Text>
 
       {step === 1 && (
         <View>
-          <Field label="Email" value={form.email} onChange={(v) => set('email', v)} />
-          <Field label="Password" value={form.password} onChange={(v) => set('password', v)} secure />
-          <Field label="First name" value={form.farmerName} onChange={(v) => set('farmerName', v)} />
-          <Field label="Surname" value={form.surname} onChange={(v) => set('surname', v)} />
-          <ChipSelect label="Gender" value={form.gender} options={[...GENDER_OPTIONS]} onSelect={(v) => set('gender', v)} />
-          <ChipSelect label="Age range" value={form.ageRange} options={[...AGE_RANGE_OPTIONS]} onSelect={(v) => set('ageRange', v)} />
-          <Field label="Phone" value={form.phone} onChange={(v) => set('phone', v)} />
-          <Field label="Postcode" value={form.postcode} onChange={(v) => set('postcode', v)} />
-          <Field label="LGA / borough" value={form.lga} onChange={(v) => set('lga', v)} />
-          <Field label="State / region" value={form.state} onChange={(v) => set('state', v)} />
-          <Field label="Country" value={form.country} onChange={(v) => set('country', v)} />
+          <Field label="Email" value={email} onChange={setEmail} />
+          <Field label="Password" value={password} onChange={setPassword} secure={!showPassword} />
+          <Pressable onPress={() => setShowPassword((s) => !s)} style={{ marginBottom: 8 }}>
+            <Text style={{ color: colors.primary }}>{showPassword ? 'Hide password' : 'Show password'}</Text>
+          </Pressable>
+          <Text style={styles.hint}>{PASSWORD_RULE_HINT}</Text>
+          <Field label="First name" value={farmerName} onChange={setFarmerName} />
+          <Field label="Surname" value={surname} onChange={setSurname} />
+          <ChipSelect label="Gender" value={gender} options={[...GENDER_OPTIONS]} onSelect={setGender} />
+          <ChipSelect label="Age range" value={ageRange} options={[...AGE_RANGE_OPTIONS]} onSelect={setAgeRange} />
+          <ChipSelect
+            label="Phone country code"
+            value={phoneCountryCode}
+            options={dialCodes.map((d) => d.dial)}
+            labels={dialCodes.map((d) => d.label)}
+            onSelect={setPhoneCountryCode}
+          />
+          <Field label="Phone (national number)" value={phone} onChange={setPhone} />
+          <Field label="Postcode" value={postcode} onChange={setPostcode} />
+          <Field label="LGA / borough" value={lga} onChange={setLga} />
+          <Field label="State / region" value={state} onChange={setState} />
+          <ChipSelect
+            label="Country"
+            value={country}
+            options={COUNTRY_OPTIONS.map((c) => c.name)}
+            onSelect={(v) => {
+              setCountry(v);
+              const match = COUNTRY_OPTIONS.find((c) => c.name === v);
+              if (match) setPhoneCountryCode(match.dialCode);
+            }}
+          />
+          <ChipSelect
+            label="Est. fish output / year"
+            value={estimatedFishOutputYear}
+            options={[...ESTIMATED_FISH_OUTPUT_OPTIONS, CUSTOM_OPTION_VALUE]}
+            labels={[...ESTIMATED_FISH_OUTPUT_OPTIONS, 'Other (fill yourself)']}
+            onSelect={setEstimated}
+          />
+          {estimatedFishOutputYear === CUSTOM_OPTION_VALUE && (
+            <Field label="Custom output" value={estimatedCustom} onChange={setEstimatedCustom} />
+          )}
+
+          <Text style={styles.chipLabel}>What do you do? (select all that apply)</Text>
+          <View style={styles.chipRow}>
+            {MEMBER_CATEGORIES.map((c) => {
+              const on = categories.includes(c.value);
+              return (
+                <Pressable key={c.value} onPress={() => toggleCategory(c.value)} style={[styles.chip, on && styles.chipActive]}>
+                  <Text style={[styles.chipText, on && styles.chipTextActive]}>{c.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
       )}
 
       {step === 2 && (
         <View>
-          <Field label="Farm name" value={form.farmName} onChange={(v) => set('farmName', v)} />
-          <Field label="Farm phone" value={form.farmPhone} onChange={(v) => set('farmPhone', v)} />
-          <Field label="Farm address" value={form.location} onChange={(v) => set('location', v)} />
-          <Field label="City" value={form.city} onChange={(v) => set('city', v)} />
-          <Field label="Farm size (m²)" value={form.farmSizeSqM} onChange={(v) => set('farmSizeSqM', v)} numeric />
-          <Field label="Total ponds on farm" value={form.totalPonds} onChange={(v) => set('totalPonds', v)} numeric />
-          <Field label="Latitude (optional)" value={form.latitude} onChange={(v) => set('latitude', v)} numeric />
-          <Field label="Longitude (optional)" value={form.longitude} onChange={(v) => set('longitude', v)} numeric />
-          <Field label="Pond name" value={form.pondName} onChange={(v) => set('pondName', v)} />
-          <Field label="Pond number" value={form.pondNumber} onChange={(v) => set('pondNumber', v)} numeric />
-          <ChipSelect label="Pond type" value={form.pondType} options={[...POND_TYPE_OPTIONS]} onSelect={(v) => set('pondType', v)} />
-          <Field label="Length (m)" value={form.lengthM} onChange={(v) => set('lengthM', v)} numeric />
-          <Field label="Width (m)" value={form.widthM} onChange={(v) => set('widthM', v)} numeric />
-          <Field label="Depth (m)" value={form.depthM} onChange={(v) => set('depthM', v)} numeric />
+          <Field label="Farm name" value={farmName} onChange={setFarmName} />
+          <Field label="Farm phone" value={farmPhone} onChange={setFarmPhone} />
+          <Field label="Farm address" value={location} onChange={setLocation} />
+          <Field label="City" value={city} onChange={setCity} />
           <ChipSelect
-            label="Culture system"
-            value={form.cultureSystem}
-            options={CULTURE_SYSTEM_OPTIONS.map((o) => o.value)}
-            labels={CULTURE_SYSTEM_OPTIONS.map((o) => o.label)}
-            onSelect={(v) => set('cultureSystem', v)}
+            label="Farm size (acres)"
+            value={farmSizeAcres}
+            options={[...FARM_SIZE_ACRES_OPTIONS, CUSTOM_OPTION_VALUE]}
+            labels={[...FARM_SIZE_ACRES_OPTIONS, 'Other (fill yourself)']}
+            onSelect={setFarmSizeAcres}
           />
+          {farmSizeAcres === CUSTOM_OPTION_VALUE && (
+            <Field label="Custom farm size" value={farmSizeCustom} onChange={setFarmSizeCustom} />
+          )}
+          <ChipSelect
+            label="Currency"
+            value={currency}
+            options={CURRENCY_OPTIONS.map((c) => c.code)}
+            labels={CURRENCY_OPTIONS.map((c) => c.label)}
+            onSelect={setCurrency}
+          />
+
+          {ponds.map((pond, index) => (
+            <View key={index} style={styles.pondBlock}>
+              <Text style={styles.pondTitle}>Pond {pond.pondNumber}</Text>
+              <Field label="Pond name" value={pond.pondName} onChange={(v) => updatePond(index, { pondName: v })} />
+              <Field label="Pond number" value={pond.pondNumber} onChange={(v) => updatePond(index, { pondNumber: v })} numeric />
+              <ChipSelect
+                label="Pond type"
+                value={pond.pondType}
+                options={[...POND_TYPE_OPTIONS]}
+                onSelect={(v) => updatePond(index, { pondType: v })}
+              />
+              <Field label="Length (m)" value={pond.lengthM} onChange={(v) => updatePond(index, { lengthM: v })} numeric />
+              <Field label="Width (m)" value={pond.widthM} onChange={(v) => updatePond(index, { widthM: v })} numeric />
+              <Field label="Depth (m)" value={pond.depthM} onChange={(v) => updatePond(index, { depthM: v })} numeric />
+              <ChipSelect
+                label="Culture system"
+                value={pond.cultureSystem}
+                options={CULTURE_SYSTEM_OPTIONS.map((o) => o.value)}
+                labels={CULTURE_SYSTEM_OPTIONS.map((o) => o.label)}
+                onSelect={(v) => updatePond(index, { cultureSystem: v })}
+              />
+              <Text style={styles.chipLabel}>Fish types (multi-select)</Text>
+              <View style={styles.chipRow}>
+                {FISH_SPECIES_OPTIONS.map((sp) => {
+                  const on = pond.fishSpecies.includes(sp);
+                  return (
+                    <Pressable key={sp} onPress={() => toggleFish(index, sp)} style={[styles.chip, on && styles.chipActive]}>
+                      <Text style={[styles.chipText, on && styles.chipTextActive]}>{sp}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <Field label="Other fish type" value={pond.fishCustom} onChange={(v) => updatePond(index, { fishCustom: v })} />
+              <Field label="Qty stocked" value={pond.quantityStocked} onChange={(v) => updatePond(index, { quantityStocked: v })} numeric />
+              <Field label={`Fingerling price (${curSym})`} value={pond.fingerlingPrice} onChange={(v) => updatePond(index, { fingerlingPrice: v })} numeric />
+              <Field label="Stocking date (YYYY-MM-DD)" value={pond.stockingDate} onChange={(v) => updatePond(index, { stockingDate: v })} />
+              <Field label="Proposed sales date" value={pond.proposedSalesDate} onChange={(v) => updatePond(index, { proposedSalesDate: v })} />
+              {ponds.length > 1 && (
+                <Pressable onPress={() => setPonds((prev) => prev.filter((_, i) => i !== index))} style={styles.removeBtn}>
+                  <Text style={{ color: '#b91c1c' }}>Remove pond</Text>
+                </Pressable>
+              )}
+            </View>
+          ))}
+          <Pressable style={styles.addPond} onPress={() => setPonds((prev) => [...prev, emptyPond(prev.length + 1)])}>
+            <Text style={{ color: colors.primary, fontWeight: '600' }}>+ Add another pond</Text>
+          </Pressable>
         </View>
       )}
 
       {step === 3 && (
         <View>
-          <ChipSelect label="Fish species" value={form.fishSpecies} options={[...FISH_SPECIES_OPTIONS]} onSelect={(v) => set('fishSpecies', v)} />
-          <Field label="Qty stocked" value={form.quantityStocked} onChange={(v) => set('quantityStocked', v)} numeric />
-          <Field label="Avg weight @ stocking (g)" value={form.averageWeightAtStockingG} onChange={(v) => set('averageWeightAtStockingG', v)} numeric />
-          <Field label="Stocking date (YYYY-MM-DD)" value={form.stockingDate} onChange={(v) => set('stockingDate', v)} />
-          <Field label="Proposed sales date" value={form.proposedSalesDate} onChange={(v) => set('proposedSalesDate', v)} />
-          <Field label="Feed name" value={form.feedName} onChange={(v) => set('feedName', v)} />
-          <ChipSelect label="Feed type" value={form.feedType} options={[...FEED_TYPE_OPTIONS]} onSelect={(v) => set('feedType', v)} />
-          <Field label="Feed maker" value={form.feedMaker} onChange={(v) => set('feedMaker', v)} />
-          <Field label="Feed bags" value={form.feedBags} onChange={(v) => set('feedBags', v)} numeric />
-          <Field label="Crude protein (%)" value={form.desiredCrudeProteinPct} onChange={(v) => set('desiredCrudeProteinPct', v)} numeric />
-          <ChipSelect label="Water source" value={form.waterSource} options={[...WATER_SOURCE_OPTIONS]} onSelect={(v) => set('waterSource', v)} />
-          <Field label="Initial pH (optional)" value={form.initialPh} onChange={(v) => set('initialPh', v)} numeric />
-          <Field label="Initial DO mg/L (optional)" value={form.initialDissolvedOxygenMgL} onChange={(v) => set('initialDissolvedOxygenMgL', v)} numeric />
+          <Field label="Feed name" value={feedName} onChange={setFeedName} />
+          <ChipSelect label="Feed type" value={feedType} options={[...FEED_TYPE_OPTIONS]} onSelect={setFeedType} />
+          <Field label="Feed maker" value={feedMaker} onChange={setFeedMaker} />
+          <Field label="Feed bags" value={feedBags} onChange={setFeedBags} numeric />
+          <Field
+            label={`Crude protein % (${REGISTRATION_RANGES.crudeProteinPct.min}–${REGISTRATION_RANGES.crudeProteinPct.max})`}
+            value={desiredCrudeProteinPct}
+            onChange={setProtein}
+            numeric
+          />
+          <Field label="Desired feed qty (kg)" value={desiredFeedQuantityKg} onChange={setFeedQty} numeric />
+          <ChipSelect label="Water source" value={waterSource} options={[...WATER_SOURCE_OPTIONS]} onSelect={setWaterSource} />
+          <Field
+            label={`Initial pH (${REGISTRATION_RANGES.initialPh.min}–${REGISTRATION_RANGES.initialPh.max})`}
+            value={initialPh}
+            onChange={setInitialPh}
+            numeric
+          />
+          <Field
+            label={`Initial DO (${REGISTRATION_RANGES.dissolvedOxygenMgL.min}–${REGISTRATION_RANGES.dissolvedOxygenMgL.max})`}
+            value={initialDo}
+            onChange={setInitialDo}
+            numeric
+          />
         </View>
       )}
 
@@ -195,6 +444,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   heading: { fontSize: 18, fontWeight: '600', color: colors.primary, marginBottom: 4 },
   sub: { color: colors.muted, marginBottom: 12, fontSize: 13 },
+  hint: { color: colors.muted, fontSize: 12, marginBottom: 10 },
   input: { backgroundColor: colors.card, borderRadius: 8, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#ddd' },
   nav: { flexDirection: 'row', gap: 10, marginTop: 16 },
   btn: { flex: 1, backgroundColor: colors.primary, borderRadius: 8, padding: 14, alignItems: 'center' },
@@ -208,4 +458,8 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   chipText: { fontSize: 12, color: colors.text },
   chipTextActive: { color: '#fff' },
+  pondBlock: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#e2e8f0' },
+  pondTitle: { fontWeight: '600', color: colors.primary, marginBottom: 8 },
+  removeBtn: { marginBottom: 8 },
+  addPond: { marginTop: 8, marginBottom: 8 },
 });

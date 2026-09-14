@@ -18,7 +18,7 @@ export default function SubscribePage() {
       router.push('/login');
       return;
     }
-    fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/api/billing/plans`)
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/billing/plans`)
       .then((r) => r.json())
       .then(setPlans);
   }, [router]);

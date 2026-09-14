@@ -13,6 +13,7 @@ import { contentRouter } from './content';
 import { messagesRouter } from './messages';
 import { billingRouter, handleStripeWebhook } from './billing';
 import { marketplaceRouter } from './marketplace';
+import { uploadsDir } from './uploads';
 
 validateConfig();
 
@@ -23,8 +24,16 @@ app.set('trust proxy', 1);
 app.use(
   helmet({
     contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
   }),
 );
+
+app.use('/uploads', express.static(uploadsDir, {
+  maxAge: '7d',
+  setHeaders(res) {
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  },
+}));
 
 app.use(
   cors({
@@ -52,7 +61,7 @@ const loginLimiter = rateLimit({
 // Stripe webhook needs raw body — must be before express.json()
 app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), handleStripeWebhook);
 
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 
 app.get('/', (_req, res) => {
   res.json({
@@ -113,6 +122,20 @@ app.get('/api/pond/day-in-cycle', (req, res) => {
   res.json({ dayInCycle: dayInCultureCycle(stockingDate, today) });
 });
 
-app.listen(config.port, () => {
+app.use((err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const tooLarge = err && typeof err === 'object' && (
+    ('type' in err && (err as { type?: string }).type === 'entity.too.large')
+    || ('status' in err && (err as { status?: number }).status === 413)
+  );
+  if (tooLarge) {
+    res.status(413).json({
+      error: 'That file is too large to paste. Use the file picker on the Videos tab (MP4, WebM, or MOV, max 80 MB).',
+    });
+    return;
+  }
+  next(err);
+});
+
+app.listen(config.port, '0.0.0.0', () => {
   console.log(`Fishmaster API running on port ${config.port} (${config.nodeEnv})`);
 });

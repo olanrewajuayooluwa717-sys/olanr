@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { REPORT_CATALOG } from '@fishmaster/shared-types';
+import { MEMBER_CATEGORIES, memberCategoryLabel, REPORT_CATALOG } from '@fishmaster/shared-types';
 import {
   AdminShell,
   AdminPanel,
@@ -15,11 +15,14 @@ import {
   parseAdminSection,
   type AdminSection,
 } from '../../components/AdminShell';
-import { apiFetch, getRole } from '../../lib/api';
+import { API_URL, apiFetch, getRole, getToken, isVideoMedia, mediaSrc } from '../../lib/api';
 
 type Member = {
   id: string; name: string; email: string; role: string;
   phone?: string | null; gender?: string | null;
+  categories?: string[];
+  estimatedFishOutputYear?: string | null;
+  state?: string | null; country?: string | null; lga?: string | null;
   subscriptionStatus: string; subscriptionTier: string;
   _count: { farms: number };
   farms: {
@@ -32,6 +35,8 @@ type MemberDetail = {
   id: string; name: string; surname?: string | null; email: string;
   phone?: string | null; gender?: string | null; ageRange?: string | null;
   role: string; lga?: string | null; state?: string | null; country?: string | null;
+  categories?: string[];
+  estimatedFishOutputYear?: string | null;
   subscriptionTier: string; subscriptionStatus: string; createdAt: string;
   summary: {
     farmCount: number; pondCount: number; cycleCount: number;
@@ -63,6 +68,7 @@ type MemberDetail = {
 
 type Post = {
   id: string; type: string; title: string; body: string; mediaUrl?: string | null;
+  placements?: string[];
   published: boolean; createdAt: string;
   author: { name: string };
 };
@@ -119,12 +125,40 @@ const EMPTY_FEED_BRANDS = (): FeedBrandRow[] =>
   }));
 
 const CONTENT_TYPES = [
-  { value: 'advert', label: 'Adverts' },
+  { value: 'advert', label: 'Sponsored' },
   { value: 'article', label: 'Articles' },
   { value: 'information', label: 'Information' },
   { value: 'picture', label: 'Pictures' },
   { value: 'video', label: 'Videos' },
 ];
+
+const AD_PLACES = [
+  { id: 'home', label: 'Home feed' },
+  { id: 'article', label: 'Articles' },
+  { id: 'information', label: 'Information' },
+  { id: 'picture', label: 'Pictures' },
+  { id: 'video', label: 'Videos' },
+];
+
+function PlacePicker({ value, onChange }: { value: string[]; onChange: (next: string[]) => void }) {
+  return (
+    <fieldset style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '0.6rem 0.75rem', margin: 0 }}>
+      <legend style={{ fontSize: '0.8rem', color: '#64748b', padding: '0 4px' }}>Show this ad in</legend>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.55rem 1rem' }}>
+        {AD_PLACES.map((p) => (
+          <label key={p.id} style={{ fontSize: '0.85rem', display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input
+              type="checkbox"
+              checked={value.includes(p.id)}
+              onChange={(e) => onChange(e.target.checked ? [...value, p.id] : value.filter((x) => x !== p.id))}
+            />
+            {p.label}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
 
 const th: React.CSSProperties = {
   textAlign: 'left',
@@ -156,6 +190,10 @@ function naira(n: number) {
   return `₦${n.toLocaleString('en-NG', { maximumFractionDigits: 0 })}`;
 }
 
+function placeBits(...parts: Array<string | null | undefined>) {
+  return parts.map((p) => p?.trim()).filter(Boolean).join(', ');
+}
+
 export default function AdminPage() {
   return (
     <Suspense fallback={<div style={{ padding: '2rem' }}>Loading admin…</div>}>
@@ -177,12 +215,29 @@ function AdminPageInner() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [farms, setFarms] = useState<FarmOption[]>([]);
   const [memberQuery, setMemberQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [directory, setDirectory] = useState<{
+    members: {
+      id: string; name: string; email: string; categories: string[];
+      location: { city: string; lga: string; state: string; country: string; farmName: string | null };
+    }[];
+    byLocation: {
+      state: string; country: string; city: string;
+      categoryCounts: Record<string, number>; memberCount: number;
+    }[];
+  } | null>(null);
+  const [dirCategory, setDirCategory] = useState('');
+  const [dirState, setDirState] = useState('');
+  const [dirCountry, setDirCountry] = useState('');
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [memberDetail, setMemberDetail] = useState<MemberDetail | null>(null);
+  const [memberLoading, setMemberLoading] = useState(false);
+  const [memberError, setMemberError] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<'overview' | 'ponds' | 'stocks' | 'economics'>('overview');
-  const [form, setForm] = useState({ type: 'advert', title: '', body: '', mediaUrl: '' });
+  const [form, setForm] = useState({ type: 'article', title: '', body: '', mediaUrl: '', placements: [] as string[] });
+  const [uploading, setUploading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ type: 'advert', title: '', body: '', mediaUrl: '' });
+  const [editForm, setEditForm] = useState({ type: 'advert', title: '', body: '', mediaUrl: '', placements: [] as string[] });
   const [msgForm, setMsgForm] = useState({ userId: '', title: '', body: '', reportNum: '', pondId: '', pondLabel: '' });
   const [memberPonds, setMemberPonds] = useState<MemberPond[]>([]);
   const [feedMemberId, setFeedMemberId] = useState('');
@@ -191,6 +246,7 @@ function AdminPageInner() {
   const [feedOk, setFeedOk] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [msgOk, setMsgOk] = useState<string | null>(null);
+  const [broadcastOk, setBroadcastOk] = useState<string | null>(null);
 
   const [ingredients, setIngredients] = useState<IngredientRow[]>([]);
   const [ingredientFilter, setIngredientFilter] = useState<'all' | 'protein' | 'carbohydrate' | 'others'>('all');
@@ -222,7 +278,22 @@ function AdminPageInner() {
   useEffect(() => {
     if (section === 'config') loadConfig();
     if (section === 'marketplace') loadMarketplace();
-  }, [section]);
+    if (section === 'directory') loadDirectory();
+  }, [section, dirCategory, dirState, dirCountry]);
+
+  const loadDirectory = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (dirCategory) params.set('category', dirCategory);
+      if (dirState) params.set('state', dirState);
+      if (dirCountry) params.set('country', dirCountry);
+      const q = params.toString();
+      const data = await apiFetch(`/api/admin/directory${q ? `?${q}` : ''}`);
+      setDirectory(data);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
 
   const load = async () => {
     try {
@@ -288,17 +359,37 @@ function AdminPageInner() {
     }
   };
 
+  const closeMember = () => {
+    setSelectedMemberId(null);
+    setMemberDetail(null);
+    setMemberError(null);
+    setMemberLoading(false);
+  };
+
   const openMember = async (id: string) => {
     setSelectedMemberId(id);
+    setMemberDetail(null);
+    setMemberError(null);
+    setMemberLoading(true);
     setDetailTab('overview');
     try {
       const detail = await apiFetch(`/api/admin/members/${id}`);
       setMemberDetail(detail);
     } catch (e) {
-      setError(String(e));
-      setMemberDetail(null);
+      setMemberError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setMemberLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!selectedMemberId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeMember();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectedMemberId]);
 
   const loadPonds = async (userId: string) => {
     try {
@@ -414,17 +505,134 @@ function AdminPageInner() {
     loadConfig();
   };
 
+  const copyShareLink = async (id: string) => {
+    const url = `${window.location.origin}/s/${id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setBroadcastOk('Share link copied. Paste it on Facebook, WhatsApp, or LinkedIn.');
+      setError(null);
+    } catch {
+      setError(url);
+    }
+  };
+
   const createPost = async (e: React.FormEvent) => {
     e.preventDefault();
-    const payload = {
-      type: form.type,
-      title: form.title,
-      body: form.body,
-      ...(form.mediaUrl ? { mediaUrl: form.mediaUrl } : {}),
-    };
-    await apiFetch('/api/admin/posts', { method: 'POST', body: JSON.stringify(payload) });
-    setForm({ type: 'advert', title: '', body: '', mediaUrl: '' });
-    load();
+    setError(null);
+    setBroadcastOk(null);
+    try {
+      if ((form.type === 'video' || form.type === 'picture') && !form.mediaUrl.trim()) {
+        setError(form.type === 'video' ? 'Upload a video file first.' : 'Upload an image file first.');
+        return;
+      }
+      if (form.type === 'advert' && form.placements.length === 0) {
+        setError('Choose at least one place for this ad.');
+        return;
+      }
+      await apiFetch('/api/admin/posts', {
+        method: 'POST',
+        body: JSON.stringify({
+          type: form.type,
+          title: form.title,
+          body: form.body.trim() || form.title,
+          ...(form.mediaUrl ? { mediaUrl: form.mediaUrl } : {}),
+          ...(form.type === 'advert' ? { placements: form.placements } : {}),
+        }),
+      });
+      const label = CONTENT_TYPES.find((t) => t.value === form.type)?.label ?? form.type;
+      const where = form.type === 'advert'
+        ? AD_PLACES.filter((p) => form.placements.includes(p.id)).map((p) => p.label).join(', ')
+        : `the ${label} tab`;
+      setBroadcastOk(form.type === 'advert' ? `Published as sponsored in ${where}.` : `Published to ${where}.`);
+      setForm((f) => ({ ...f, title: '', body: '', mediaUrl: '', placements: [] }));
+      load();
+    } catch (err) {
+      setError(String(err).replace(/^Error: /, ''));
+    }
+  };
+
+  const uploadMediaFile = async (file: File | null, target: 'new' | 'edit' = 'new') => {
+    if (!file) return;
+    const kind = target === 'edit' ? editForm.type : form.type;
+    const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v)$/i.test(file.name);
+    const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|webp|gif)$/i.test(file.name);
+    if (kind === 'video' && !isVideo) {
+      setError('Choose an MP4, WebM, or MOV file.');
+      return;
+    }
+    if (kind === 'picture' && !isImage) {
+      setError('Choose a JPG, PNG, WebP, or GIF.');
+      return;
+    }
+    if (kind === 'advert' && !isVideo && !isImage) {
+      setError('Ads can be a picture (JPG, PNG, WebP, GIF) or a video (MP4, WebM, MOV).');
+      return;
+    }
+    if (file.size > 80 * 1024 * 1024) {
+      setError('That file is over 80 MB. Compress it and try again.');
+      return;
+    }
+    setError(null);
+    setBroadcastOk('Uploading…');
+    setUploading(true);
+    try {
+      const body = new FormData();
+      body.append('file', file);
+      const token = getToken();
+      const res = await fetch(`${API_URL}/api/admin/uploads`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      const url = String(data.url ?? '');
+      if (target === 'edit') setEditForm((f) => ({ ...f, mediaUrl: url }));
+      else {
+        setForm((f) => ({
+          ...f,
+          mediaUrl: url,
+          title: f.title || file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim(),
+        }));
+      }
+      setBroadcastOk('File uploaded. Add a title, then publish.');
+    } catch (err) {
+      setBroadcastOk(null);
+      setError(String(err).replace(/^Error: /, ''));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const uploadArticleFiles = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setError(null);
+    setBroadcastOk(null);
+    try {
+      let n = 0;
+      for (const file of Array.from(files)) {
+        if (file.type.startsWith('video/') || file.type.startsWith('image/') || /\.(mp4|mov|webm|m4v|mkv|avi|jpe?g|png|webp|gif)$/i.test(file.name)) {
+          setError('That is a video or picture. Choose the Videos or Pictures tab, then use Upload file.');
+          return;
+        }
+        const text = await file.text();
+        const title = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+        if (!text.trim()) continue;
+        await apiFetch('/api/admin/posts', {
+          method: 'POST',
+          body: JSON.stringify({ type: 'article', title: title || 'Untitled', body: text.trim() }),
+        });
+        n += 1;
+      }
+      if (!n) {
+        setError('Those files were empty. Use .txt or .md files.');
+        return;
+      }
+      setBroadcastOk(`Published ${n} article${n === 1 ? '' : 's'} to the Articles tab.`);
+      load();
+    } catch (err) {
+      setError(String(err).replace(/^Error: /, ''));
+    }
   };
 
   const sendMessage = async (e: React.FormEvent) => {
@@ -468,22 +676,28 @@ function AdminPageInner() {
       title: p.title,
       body: p.body,
       mediaUrl: p.mediaUrl ?? '',
+      placements: p.placements ?? [],
     });
   };
 
   const cancelEdit = () => {
     setEditingId(null);
-    setEditForm({ type: 'advert', title: '', body: '', mediaUrl: '' });
+    setEditForm({ type: 'advert', title: '', body: '', mediaUrl: '', placements: [] });
   };
 
   const saveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingId) return;
+    if (editForm.type === 'advert' && editForm.placements.length === 0) {
+      setError('Choose at least one place for this ad.');
+      return;
+    }
     const payload = {
       type: editForm.type,
       title: editForm.title,
       body: editForm.body,
       mediaUrl: editForm.mediaUrl || null,
+      placements: editForm.type === 'advert' ? editForm.placements : [],
     };
     await apiFetch(`/api/admin/posts/${editingId}`, { method: 'PATCH', body: JSON.stringify(payload) });
     cancelEdit();
@@ -575,19 +789,27 @@ function AdminPageInner() {
     load();
   };
 
-  const needsMediaEdit = editForm.type === 'picture' || editForm.type === 'video';
-  const needsMedia = form.type === 'picture' || form.type === 'video';
+  const needsMediaEdit = editForm.type === 'picture' || editForm.type === 'video' || editForm.type === 'advert';
+  const needsMedia = form.type === 'picture' || form.type === 'video' || form.type === 'advert';
 
   const filteredMembers = useMemo(() => {
+    let list = members;
+    if (categoryFilter) {
+      list = list.filter((m) => (m.categories ?? []).includes(categoryFilter));
+    }
     const q = memberQuery.trim().toLowerCase();
-    if (!q) return members;
-    return members.filter((m) =>
-      [m.name, m.email, m.phone, m.gender, m.role, ...m.farms.map((f) => `${f.name} ${f.city} ${f.state}`)]
+    if (!q) return list;
+    return list.filter((m) =>
+      [
+        m.name, m.email, m.phone, m.gender, m.role,
+        ...(m.categories ?? []).map(memberCategoryLabel),
+        ...m.farms.map((f) => `${f.name} ${f.city} ${f.state} ${f.country}`),
+      ]
         .join(' ')
         .toLowerCase()
         .includes(q),
     );
-  }, [members, memberQuery]);
+  }, [members, memberQuery, categoryFilter]);
 
   const staff = useMemo(
     () => members.filter((m) => m.role === 'super_admin' || m.role === 'manager'),
@@ -617,21 +839,33 @@ function AdminPageInner() {
             title="All Members"
             count={filteredMembers.length}
             action={
-              <input
-                placeholder={`Search ${members.length} members`}
-                value={memberQuery}
-                onChange={(e) => setMemberQuery(e.target.value)}
-                style={adminSearch}
-              />
+              <div className="admin-toolbar" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  style={{ ...adminInput, minWidth: 160 }}
+                >
+                  <option value="">All categories</option>
+                  {MEMBER_CATEGORIES.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+                <input
+                  placeholder={`Search ${members.length} members`}
+                  value={memberQuery}
+                  onChange={(e) => setMemberQuery(e.target.value)}
+                  style={adminSearch}
+                />
+              </div>
             }
           >
-            <AdminTable>
+            <AdminTable className="member-table">
               <thead>
                 <tr>
                   <th style={th}>Name</th>
                   <th style={th}>Email / phone</th>
-                  <th style={th}>Gender</th>
-                  <th style={th}>Farm</th>
+                  <th style={th}>What they do</th>
+                  <th style={th}>Location</th>
                   <th style={th}>Status</th>
                   <th style={th}>Action</th>
                 </tr>
@@ -655,12 +889,35 @@ function AdminPageInner() {
                         <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 2 }}>{m.phone}</div>
                       )}
                     </td>
-                    <td style={td}>{m.gender ?? '—'}</td>
+                    <td style={td}>
+                      {(m.categories ?? []).length === 0 ? (
+                        <span style={{ color: '#94a3b8' }}>—</span>
+                      ) : (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                          {(m.categories ?? []).map((c) => (
+                            <span
+                              key={c}
+                              style={{
+                                fontSize: '0.7rem',
+                                background: '#ecfeff',
+                                color: '#0e7490',
+                                padding: '0.15rem 0.4rem',
+                                borderRadius: 4,
+                              }}
+                            >
+                              {memberCategoryLabel(c)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </td>
                     <td style={td}>
                       <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                        {m.farms.length === 0 ? 'No farm' : m.farms.map((f) => (
+                        {m.farms.length === 0 ? (
+                          placeBits(m.lga, m.state, m.country) || 'No farm'
+                        ) : m.farms.map((f) => (
                           <div key={f.id}>
-                            {f.name} — {f.city}, {f.state}
+                            {[f.name, placeBits(f.city, f.state, f.country)].filter(Boolean).join(' — ')}
                             {f.latitude != null && f.longitude != null ? (
                               <>
                                 {' · '}
@@ -709,17 +966,71 @@ function AdminPageInner() {
                 )}
               </tbody>
             </AdminTable>
+            <div className="member-cards">
+              {filteredMembers.map((m) => {
+                const place = m.farms.length === 0
+                  ? placeBits(m.lga, m.state, m.country) || 'No farm'
+                  : m.farms.map((f) => [f.name, placeBits(f.city, f.state, f.country)].filter(Boolean).join(' — ')).join(' · ');
+                return (
+                  <article key={m.id} className="member-card">
+                    <strong style={{ color: '#0f766e' }}>{m.name}</strong>
+                    <div style={{ fontSize: '0.9rem', marginTop: 4 }}>{m.email}</div>
+                    {m.phone && <div style={{ fontSize: '0.85rem', color: '#64748b' }}>{m.phone}</div>}
+                    <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 6 }}>{place}</div>
+                    <div style={{ marginTop: 8 }}><StatusPill status={m.subscriptionStatus} /></div>
+                    <div className="member-card-actions">
+                      <button type="button" onClick={() => openMember(m.id)} style={adminBtnGhost}>View</button>
+                      {m.subscriptionStatus === 'active' ? (
+                        <button type="button" onClick={() => suspend(m.id)} style={adminBtnDanger}>Suspend</button>
+                      ) : (
+                        <button type="button" onClick={() => activate(m.id)} style={adminBtn}>Activate</button>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+              {!filteredMembers.length && (
+                <p style={{ margin: 0, color: '#64748b' }}>No members match this search.</p>
+              )}
+            </div>
           </AdminPanel>
 
-          {memberDetail && (
+          {selectedMemberId && (
+            <div
+              role="presentation"
+              className="admin-modal-backdrop"
+              onClick={closeMember}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 40,
+                background: 'rgba(15, 23, 42, 0.45)',
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'center',
+                padding: '4vh 1rem 2rem',
+                overflowY: 'auto',
+              }}
+            >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label={memberDetail?.name ?? 'Member'}
+              className="admin-modal-dialog"
+              onClick={(e) => e.stopPropagation()}
+              style={{ width: 'min(920px, 100%)' }}
+            >
             <AdminPanel
-              title={memberDetail.name}
+              title={memberDetail?.name ?? 'Member'}
               action={
-                <button type="button" onClick={() => { setSelectedMemberId(null); setMemberDetail(null); }} style={adminBtnGhost}>
+                <button type="button" onClick={closeMember} style={adminBtnGhost}>
                   Close
                 </button>
               }
             >
+              {memberLoading && <p style={{ margin: 0, color: '#64748b' }}>Loading member…</p>}
+              {memberError && <p style={{ margin: 0, color: '#dc2626' }}>{memberError}</p>}
+              {memberDetail && (<>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
                 {(['overview', 'ponds', 'stocks', 'economics'] as const).map((t) => (
                   <button key={t} type="button" onClick={() => setDetailTab(t)} style={tabBtn(detailTab === t)}>
@@ -733,13 +1044,26 @@ function AdminPageInner() {
                   <div><strong>Email:</strong> {memberDetail.email}</div>
                   <div><strong>Phone:</strong> {memberDetail.phone ?? '—'}</div>
                   <div><strong>Gender:</strong> {memberDetail.gender ?? '—'}</div>
+                  <div>
+                    <strong>What they do:</strong>{' '}
+                    {(memberDetail.categories ?? []).length
+                      ? (memberDetail.categories ?? []).map(memberCategoryLabel).join(' · ')
+                      : '—'}
+                  </div>
+                  <div><strong>Est. output / year:</strong> {memberDetail.estimatedFishOutputYear ?? '—'}</div>
                   <div><strong>Role / plan:</strong> {memberDetail.role} · {memberDetail.subscriptionTier} · <StatusPill status={memberDetail.subscriptionStatus} /></div>
                   <div>
                     <strong>Farms:</strong>{' '}
                     {memberDetail.farms.length === 0 ? 'None' : memberDetail.farms.map((f) => (
                       <div key={f.id} style={{ marginTop: 6, padding: '0.5rem 0.75rem', background: '#f8fafc', borderRadius: 8 }}>
                         <div style={{ fontWeight: 600, color: '#0f766e' }}>{f.name}</div>
-                        <div style={{ color: '#64748b' }}>{f.location} · {f.city}, {f.state}{f.lga ? ` · LGA: ${f.lga}` : ''}</div>
+                        <div style={{ color: '#64748b' }}>
+                          {[
+                            f.location && f.location !== f.name ? f.location : '',
+                            placeBits(f.city, f.state, f.country),
+                            f.lga ? `LGA: ${f.lga}` : '',
+                          ].filter(Boolean).join(' · ') || 'Location not recorded'}
+                        </div>
                         {f.latitude != null && f.longitude != null && (
                           <a href={`https://www.google.com/maps?q=${f.latitude},${f.longitude}`} target="_blank" rel="noopener noreferrer" style={{ color: '#0d9488', fontSize: '0.85rem' }}>
                             GPS {f.latitude.toFixed(4)}, {f.longitude.toFixed(4)}
@@ -843,8 +1167,95 @@ function AdminPageInner() {
                   )}
                 </div>
               )}
+              </>)}
             </AdminPanel>
+            </div>
+            </div>
           )}
+        </div>
+      )}
+
+      {section === 'directory' && (
+        <div style={{ display: 'grid', gap: '1.25rem' }}>
+          <AdminPanel
+            title="Who does what — by location"
+            count={directory?.members.length ?? 0}
+            action={
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <select value={dirCategory} onChange={(e) => setDirCategory(e.target.value)} style={adminInput}>
+                  <option value="">All categories</option>
+                  {MEMBER_CATEGORIES.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+                <input placeholder="Filter state" value={dirState} onChange={(e) => setDirState(e.target.value)} style={adminInput} />
+                <input placeholder="Filter country" value={dirCountry} onChange={(e) => setDirCountry(e.target.value)} style={adminInput} />
+              </div>
+            }
+          >
+            <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '0 0 1rem' }}>
+              Backend view of every member&apos;s location and activity categories (one or more).
+            </p>
+            <AdminTable>
+              <thead>
+                <tr>
+                  <th style={th}>Location</th>
+                  <th style={th}>Members</th>
+                  <th style={th}>Activities in this area</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(directory?.byLocation ?? []).map((loc) => (
+                  <tr key={`${loc.country}-${loc.state}-${loc.city}`}>
+                    <td style={td}>
+                      <strong>{[loc.city, loc.state, loc.country].filter(Boolean).join(', ') || 'Unknown'}</strong>
+                    </td>
+                    <td style={td}>{loc.memberCount}</td>
+                    <td style={td}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {Object.entries(loc.categoryCounts).map(([c, n]) => (
+                          <span key={c} style={{ fontSize: '0.75rem', background: '#f1f5f9', padding: '0.2rem 0.45rem', borderRadius: 4 }}>
+                            {memberCategoryLabel(c)} ({n})
+                          </span>
+                        ))}
+                        {!Object.keys(loc.categoryCounts).length && <span style={{ color: '#94a3b8' }}>No categories set</span>}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {!directory?.byLocation.length && (
+                  <tr><td style={td} colSpan={3}>No members match these filters.</td></tr>
+                )}
+              </tbody>
+            </AdminTable>
+          </AdminPanel>
+
+          <AdminPanel title="Members in filter" count={directory?.members.length ?? 0}>
+            <AdminTable>
+              <thead>
+                <tr>
+                  <th style={th}>Name</th>
+                  <th style={th}>Location</th>
+                  <th style={th}>What they do</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(directory?.members ?? []).map((m) => (
+                  <tr key={m.id}>
+                    <td style={td}><strong>{m.name}</strong><div style={{ fontSize: '0.8rem', color: '#64748b' }}>{m.email}</div></td>
+                    <td style={{ ...td, fontSize: '0.85rem' }}>
+                      {[m.location.farmName, m.location.city, m.location.lga, m.location.state, m.location.country]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </td>
+                    <td style={td}>
+                      {(m.categories ?? []).map(memberCategoryLabel).join(' · ') || '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </AdminTable>
+          </AdminPanel>
         </div>
       )}
 
@@ -852,26 +1263,83 @@ function AdminPageInner() {
         <div style={{ display: 'grid', gap: '1.25rem' }}>
           <AdminPanel title="Send to all members">
             <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '0 0 0.75rem' }}>
-              Adverts, articles, information, pictures, and videos appear on every member&apos;s home page.
+              Articles, information, pictures and videos each have their own tab. For a sponsored post, tick exactly where it should appear. After it is published, copy the share link and post that on Facebook, WhatsApp, or LinkedIn — not the homepage.
             </p>
+            {broadcastOk && <p style={{ color: '#15803d', fontWeight: 600, margin: '0 0 0.75rem' }}>{broadcastOk}</p>}
+            {error && <p style={{ color: '#dc2626', fontWeight: 600, margin: '0 0 0.75rem' }}>{error}</p>}
             <form onSubmit={createPost} style={{ display: 'grid', gap: '0.75rem' }}>
-              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} style={adminInput}>
-                {CONTENT_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>{t.label}</option>
-                ))}
-              </select>
-              <input placeholder="Title" required value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} style={adminInput} />
-              <textarea placeholder="Message body" required rows={4} value={form.body} onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))} style={adminInput} />
-              {needsMedia && (
-                <input
-                  placeholder={form.type === 'video' ? 'Video URL (https://…)' : 'Image URL (https://…)'}
-                  value={form.mediaUrl}
-                  onChange={(e) => setForm((f) => ({ ...f, mediaUrl: e.target.value }))}
-                  style={adminInput}
-                />
+              <label style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                Member tab
+                <select
+                  value={form.type}
+                  onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
+                  style={{ ...adminInput, display: 'block', marginTop: 4, width: '100%' }}
+                >
+                  {CONTENT_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+              </label>
+              {form.type === 'advert' && (
+                <PlacePicker value={form.placements} onChange={(placements) => setForm((f) => ({ ...f, placements }))} />
               )}
-              <button type="submit" style={{ ...adminBtn, width: 'fit-content' }}>Publish to all members</button>
+              <input placeholder="Title" required value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} style={adminInput} />
+              <textarea placeholder={needsMedia ? (form.type === 'advert' ? 'Caption (optional — picture or video can stand alone)' : 'Caption (optional)') : 'Article or message'} required={!needsMedia} rows={needsMedia ? 3 : 6} value={form.body} onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))} style={adminInput} />
+              {needsMedia && (
+                <label style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                  {form.type === 'advert'
+                    ? 'Picture or video (optional, max 80 MB)'
+                    : form.type === 'video'
+                      ? 'Upload a video (MP4, WebM, or MOV, max 80 MB)'
+                      : 'Upload a picture (JPG, PNG, WebP, or GIF, max 80 MB)'}
+                  <input
+                    type="file"
+                    accept={form.type === 'picture'
+                      ? 'image/jpeg,image/png,image/webp,image/gif'
+                      : form.type === 'video'
+                        ? 'video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v'
+                        : 'image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v'}
+                    onChange={(e) => {
+                      uploadMediaFile(e.target.files?.[0] ?? null);
+                      e.target.value = '';
+                    }}
+                    style={{ display: 'block', marginTop: 8 }}
+                  />
+                  {form.mediaUrl.startsWith('/uploads/') && (
+                    <span style={{ display: 'block', marginTop: 6, color: '#15803d', fontWeight: 600 }}>File ready. Add a title, then publish.</span>
+                  )}
+                  {form.mediaUrl && (form.type === 'video' || isVideoMedia(form.mediaUrl)) && (
+                    <video src={mediaSrc(form.mediaUrl)} controls style={{ width: '100%', maxHeight: 220, marginTop: 8, background: '#000', borderRadius: 8 }} />
+                  )}
+                  {form.mediaUrl && form.type !== 'video' && !isVideoMedia(form.mediaUrl) && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={mediaSrc(form.mediaUrl)} alt="" style={{ width: '100%', maxHeight: 220, objectFit: 'cover', marginTop: 8, borderRadius: 8 }} />
+                  )}
+                  <input
+                    placeholder={form.type === 'advert' ? 'Or paste a picture or video URL' : form.type === 'video' ? 'Or paste a video URL' : 'Or paste an image URL'}
+                    value={form.mediaUrl.startsWith('/uploads/') ? '' : form.mediaUrl}
+                    onChange={(e) => setForm((f) => ({ ...f, mediaUrl: e.target.value }))}
+                    style={{ ...adminInput, display: 'block', marginTop: 8, width: '100%' }}
+                  />
+                </label>
+              )}
+              <button type="submit" disabled={uploading} style={{ ...adminBtn, width: 'fit-content', opacity: uploading ? 0.6 : 1 }}>
+                {uploading ? 'Uploading…' : 'Publish to all members'}
+              </button>
             </form>
+            <label style={{ display: 'block', marginTop: '1rem', fontSize: '0.85rem', color: '#64748b' }}>
+              Or upload several articles (.txt or .md). Each file becomes one article. Videos and pictures go in the file picker above, not here.
+              <input
+                type="file"
+                accept=".txt,.md,.markdown,text/plain"
+                multiple
+                onChange={(e) => {
+                  uploadArticleFiles(e.target.files);
+                  e.target.value = '';
+                }}
+                style={{ display: 'block', marginTop: 8 }}
+              />
+            </label>
           </AdminPanel>
 
           <AdminPanel title="Published posts" count={posts.length}>
@@ -884,15 +1352,39 @@ function AdminPageInner() {
                         <option key={t.value} value={t.value}>{t.label}</option>
                       ))}
                     </select>
+                    {editForm.type === 'advert' && (
+                      <PlacePicker value={editForm.placements} onChange={(placements) => setEditForm({ ...editForm, placements })} />
+                    )}
                     <input placeholder="Title" required value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} style={adminInput} />
-                    <textarea placeholder="Message body" required rows={3} value={editForm.body} onChange={(e) => setEditForm({ ...editForm, body: e.target.value })} style={adminInput} />
+                    <textarea placeholder={editForm.type === 'advert' ? 'Caption (optional)' : 'Message body'} required={editForm.type !== 'advert'} rows={3} value={editForm.body} onChange={(e) => setEditForm({ ...editForm, body: e.target.value })} style={adminInput} />
                     {needsMediaEdit && (
-                      <input
-                        placeholder={editForm.type === 'video' ? 'Video URL' : 'Image URL'}
-                        value={editForm.mediaUrl}
-                        onChange={(e) => setEditForm({ ...editForm, mediaUrl: e.target.value })}
-                        style={adminInput}
-                      />
+                      <>
+                        <input
+                          type="file"
+                          accept={editForm.type === 'picture'
+                            ? 'image/jpeg,image/png,image/webp,image/gif'
+                            : editForm.type === 'video'
+                              ? 'video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v'
+                              : 'image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v'}
+                          onChange={(e) => {
+                            uploadMediaFile(e.target.files?.[0] ?? null, 'edit');
+                            e.target.value = '';
+                          }}
+                        />
+                        {editForm.mediaUrl && isVideoMedia(editForm.mediaUrl) && (
+                          <video src={mediaSrc(editForm.mediaUrl)} controls style={{ width: '100%', maxHeight: 180, background: '#000', borderRadius: 8 }} />
+                        )}
+                        {editForm.mediaUrl && !isVideoMedia(editForm.mediaUrl) && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={mediaSrc(editForm.mediaUrl)} alt="" style={{ width: '100%', maxHeight: 180, objectFit: 'cover', borderRadius: 8 }} />
+                        )}
+                        <input
+                          placeholder={editForm.type === 'advert' ? 'Picture or video URL' : editForm.type === 'video' ? 'Video URL' : 'Image URL'}
+                          value={editForm.mediaUrl}
+                          onChange={(e) => setEditForm({ ...editForm, mediaUrl: e.target.value })}
+                          style={adminInput}
+                        />
+                      </>
                     )}
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                       <button type="submit" style={adminBtn}>Save changes</button>
@@ -902,12 +1394,24 @@ function AdminPageInner() {
                 ) : (
                   <>
                     <strong>[{p.type}] {p.title}</strong>
+                    {p.type === 'advert' && (
+                      <p style={{ fontSize: '0.8rem', color: '#0d4f6e', margin: '0.2rem 0' }}>
+                        Shows in: {(p.placements?.length
+                          ? AD_PLACES.filter((place) => p.placements?.includes(place.id)).map((place) => place.label)
+                          : ['Everywhere (edit to choose)']
+                        ).join(', ')}
+                      </p>
+                    )}
                     {p.mediaUrl && <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '0.2rem 0' }}>{p.mediaUrl}</p>}
                     <p style={{ margin: '0.25rem 0', color: '#64748b', fontSize: '0.9rem' }}>{p.body.slice(0, 140)}{p.body.length > 140 ? '…' : ''}</p>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <button type="button" onClick={() => copyShareLink(p.id)} style={{ ...adminBtnGhost, fontSize: '0.8rem' }}>Copy share link</button>
                       <button onClick={() => startEdit(p)} style={{ ...adminBtnGhost, fontSize: '0.8rem' }}>Edit</button>
                       <button onClick={() => deletePost(p.id)} style={{ ...adminBtnDanger, fontSize: '0.8rem' }}>Delete</button>
                     </div>
+                    <p style={{ margin: '0.35rem 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
+                      Boost this link, not the homepage: {typeof window !== 'undefined' ? `${window.location.origin}/s/${p.id}` : `/s/${p.id}`}
+                    </p>
                   </>
                 )}
               </div>

@@ -2,16 +2,49 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma } from '@fishmaster/db';
 import { generateStockCycleReport, detectFeedAlert, dayInCultureCycle } from '@fishmaster/calc-engine';
+import {
+  REGISTRATION_RANGES,
+  clampRegistrationNumber,
+  formatPhoneWithCountry,
+  isMemberCategory,
+  validatePassword,
+} from '@fishmaster/shared-types';
 import { toStockCycleInput } from './mappers';
 import { requireAuth, signToken } from './auth-middleware';
 import { routeParam } from './params';
 import { evaluateWaterQuality } from './water-quality';
 import { computeCumulativeFeedCost, computeEconomicsSummary } from './economics';
 import { MISC_COST_CATEGORIES } from './economics-config';
+import { sendRegistrationConfirmation } from './mail';
 
 export const cyclesRouter = Router();
 
 const CLEANING_INTERVAL_DAYS = 14;
+
+function normalizeCategories(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const item of raw) {
+    const v = String(item).trim();
+    if (v && isMemberCategory(v) && !out.includes(v)) out.push(v);
+  }
+  return out;
+}
+
+function normalizeFishSpecies(raw: unknown): string | null {
+  if (Array.isArray(raw)) {
+    const list = raw.map((s) => String(s).trim()).filter(Boolean);
+    return list.length ? [...new Set(list)].sort((a, b) => a.localeCompare(b)).join(', ') : null;
+  }
+  if (raw == null || raw === '') return null;
+  return String(raw);
+}
+
+function parseCultureSystem(raw: unknown): 'extensive' | 'semi_intensive' | 'intensive' | 'ras' | null {
+  const v = String(raw ?? '');
+  if (v === 'extensive' || v === 'semi_intensive' || v === 'intensive' || v === 'ras') return v;
+  return null;
+}
 
 const cycleInclude = {
   pond: { include: { farm: { include: { user: true } } } },
@@ -20,6 +53,77 @@ const cycleInclude = {
   feedBrands: { orderBy: { month: 'asc' as const } },
   weightSamples: { orderBy: { date: 'desc' as const }, take: 1 },
 } as const;
+
+function buildDisplayPayload(cycle: {
+  id: string;
+  stockingDate: Date;
+  averageWeightAtStockingG: number;
+  fingerlingPrice: number;
+  quantityStocked: number;
+  desiredCrudeProteinPct: number;
+  desiredFeedQuantityKg: number;
+  fishSpecies: string | null;
+  pond: {
+    name: string;
+    number: number;
+    lengthM: number;
+    widthM: number;
+    depthM: number;
+    farm: {
+      name: string;
+      location: string;
+      city: string;
+      state: string;
+      country: string;
+      user: {
+        name: string;
+        email?: string;
+        gender?: string | null;
+        phone?: string | null;
+        categories?: string[];
+        estimatedFishOutputYear?: string | null;
+      };
+    };
+  };
+}) {
+  const farm = cycle.pond.farm;
+  const user = farm.user;
+  const volumeLiters = cycle.pond.lengthM * cycle.pond.widthM * cycle.pond.depthM * 1000;
+  const firstFeedingDate = new Date(cycle.stockingDate);
+  firstFeedingDate.setDate(firstFeedingDate.getDate() + 1);
+  return {
+    farmerName: user.name,
+    gender: user.gender ?? null,
+    phone: user.phone ?? null,
+    email: user.email ?? null,
+    categories: user.categories ?? [],
+    estimatedFishOutputYear: user.estimatedFishOutputYear ?? null,
+    farmName: farm.name,
+    location: farm.location,
+    city: farm.city,
+    state: farm.state,
+    country: farm.country,
+    pond: {
+      name: cycle.pond.name,
+      number: cycle.pond.number,
+      lengthM: cycle.pond.lengthM,
+      widthM: cycle.pond.widthM,
+      depthM: cycle.pond.depthM,
+      volumeLiters,
+    },
+    stock: {
+      averageWeightAtStockingG: cycle.averageWeightAtStockingG,
+      fingerlingPrice: cycle.fingerlingPrice,
+      quantityStocked: cycle.quantityStocked,
+      stockingDate: cycle.stockingDate,
+      firstFeedingDate,
+      stockingMonth: cycle.stockingDate.toLocaleString('en', { month: 'long' }),
+      desiredCrudeProteinPct: cycle.desiredCrudeProteinPct,
+      desiredFeedQuantityKg: cycle.desiredFeedQuantityKg,
+      fishSpecies: cycle.fishSpecies,
+    },
+  };
+}
 
 function pondCleaningSchedule(dayInCycle: number) {
   const dueToday = dayInCycle > 0 && dayInCycle % CLEANING_INTERVAL_DAYS === 0;
@@ -44,15 +148,21 @@ cyclesRouter.get('/demo/report', async (_req, res) => {
       return;
     }
     const report = generateStockCycleReport(toStockCycleInput(cycle));
-    res.json({ cycleId: cycle.id, pondName: cycle.pond.name, report });
+    res.json({
+      cycleId: cycle.id,
+      pondName: cycle.pond.name,
+      report,
+      display: buildDisplayPayload(cycle),
+    });
   } catch (err) {
     res.status(400).json({ error: String(err) });
   }
 });
 
-/** POST /api/cycles — register farm + pond + stock cycle */
+/** POST /api/cycles — register farm + pond(s) + stock cycle(s) */
 cyclesRouter.post('/', async (req, res) => {
   try {
+    const body = req.body ?? {};
     const {
       userId,
       farmerName,
@@ -60,34 +170,24 @@ cyclesRouter.post('/', async (req, res) => {
       gender,
       ageRange,
       phone,
+      phoneCountryCode,
       postcode,
       lga,
       email,
+      categories,
+      estimatedFishOutputYear,
       farmName,
       farmPhone,
       location,
       farmPostcode,
       farmLga,
       farmSizeSqM,
+      farmSizeAcres,
       totalPonds,
-      latitude,
-      longitude,
       city,
       state,
       country,
-      pondName,
-      pondNumber,
-      pondType,
-      lengthM,
-      widthM,
-      depthM,
-      fishSpecies,
-      cultureSystem,
-      quantityStocked,
-      averageWeightAtStockingG,
-      fingerlingPrice,
-      stockingDate,
-      proposedSalesDate,
+      currency,
       feedName,
       feedType,
       feedMaker,
@@ -98,13 +198,95 @@ cyclesRouter.post('/', async (req, res) => {
       initialPh,
       initialDissolvedOxygenMgL,
       password,
-    } = req.body;
+    } = body;
+
+    if (password) {
+      const pwdErr = validatePassword(String(password));
+      if (pwdErr) {
+        res.status(400).json({ error: pwdErr });
+        return;
+      }
+    }
+
+    const protein = clampRegistrationNumber(
+      Number(desiredCrudeProteinPct ?? 38),
+      REGISTRATION_RANGES.crudeProteinPct,
+    );
+    const ph =
+      initialPh != null && initialPh !== ''
+        ? clampRegistrationNumber(Number(initialPh), REGISTRATION_RANGES.initialPh)
+        : null;
+    const doMg =
+      initialDissolvedOxygenMgL != null && initialDissolvedOxygenMgL !== ''
+        ? clampRegistrationNumber(Number(initialDissolvedOxygenMgL), REGISTRATION_RANGES.dissolvedOxygenMgL)
+        : null;
+
+    type PondPayload = {
+      pondName: string;
+      pondNumber: number;
+      pondType?: string | null;
+      lengthM: number;
+      widthM: number;
+      depthM: number;
+      cultureSystem?: string | null;
+      fishSpecies?: unknown;
+      quantityStocked: number;
+      averageWeightAtStockingG: number;
+      fingerlingPrice: number;
+      stockingDate: string;
+      proposedSalesDate?: string | null;
+    };
+
+    let pondList: PondPayload[] = Array.isArray(body.ponds) ? body.ponds : [];
+    if (pondList.length === 0) {
+      pondList = [
+        {
+          pondName: body.pondName,
+          pondNumber: Number(body.pondNumber ?? 1),
+          pondType: body.pondType ?? null,
+          lengthM: Number(body.lengthM),
+          widthM: Number(body.widthM),
+          depthM: Number(body.depthM),
+          cultureSystem: body.cultureSystem ?? null,
+          fishSpecies: body.fishSpecies,
+          quantityStocked: Number(body.quantityStocked),
+          averageWeightAtStockingG: Number(body.averageWeightAtStockingG),
+          fingerlingPrice: Number(body.fingerlingPrice),
+          stockingDate: body.stockingDate,
+          proposedSalesDate: body.proposedSalesDate ?? null,
+        },
+      ];
+    }
+
+    for (const p of pondList) {
+      if (!p.pondName || !p.stockingDate) {
+        res.status(400).json({ error: 'Each pond needs a name and stocking date' });
+        return;
+      }
+      if (p.proposedSalesDate) {
+        const stock = new Date(p.stockingDate);
+        const sale = new Date(p.proposedSalesDate);
+        if (!(sale > stock)) {
+          res.status(400).json({ error: 'Date of sales must be after date of stocking' });
+          return;
+        }
+      }
+    }
+
+    const fullPhone =
+      phoneCountryCode && phone
+        ? formatPhoneWithCountry(String(phoneCountryCode), String(phone))
+        : phone
+          ? String(phone)
+          : null;
 
     let user = userId
       ? await prisma.user.findUnique({ where: { id: userId } })
       : email
         ? await prisma.user.findUnique({ where: { email } })
         : null;
+
+    const isNewUser = !user && !!email;
 
     if (!user && email) {
       const passwordHash = password ? await bcrypt.hash(String(password), 10) : null;
@@ -115,19 +297,35 @@ cyclesRouter.post('/', async (req, res) => {
           surname: surname ?? null,
           gender: gender ?? null,
           ageRange: ageRange ?? null,
-          phone: phone ?? null,
+          phone: fullPhone,
           postcode: postcode ?? null,
           lga: lga ?? null,
           state: state ?? null,
           country: country ?? null,
+          categories: normalizeCategories(categories),
+          estimatedFishOutputYear: estimatedFishOutputYear
+            ? String(estimatedFishOutputYear)
+            : null,
           role: 'member',
           passwordHash,
         },
       });
-    } else if (user && password && !user.passwordHash) {
+    } else if (user) {
+      const cat = normalizeCategories(categories);
       user = await prisma.user.update({
         where: { id: user.id },
-        data: { passwordHash: await bcrypt.hash(String(password), 10) },
+        data: {
+          ...(password && !user.passwordHash
+            ? { passwordHash: await bcrypt.hash(String(password), 10) }
+            : {}),
+          ...(cat.length ? { categories: cat } : {}),
+          ...(estimatedFishOutputYear
+            ? { estimatedFishOutputYear: String(estimatedFishOutputYear) }
+            : {}),
+          ...(fullPhone ? { phone: fullPhone } : {}),
+          ...(state ? { state: String(state) } : {}),
+          ...(country ? { country: String(country) } : {}),
+        },
       });
     }
     if (!user) {
@@ -135,58 +333,96 @@ cyclesRouter.post('/', async (req, res) => {
       return;
     }
 
+    const currencyCode = currency ? String(currency).toUpperCase() : 'NGN';
+
     const farm = await prisma.farm.create({
       data: {
         userId: user.id,
         name: farmName,
         phone: farmPhone ?? null,
-        location,
+        location: location ?? '',
         postcode: farmPostcode ?? null,
         lga: farmLga ?? null,
-        sizeSqM: farmSizeSqM != null ? Number(farmSizeSqM) : null,
-        totalPonds: totalPonds != null ? Number(totalPonds) : null,
-        latitude: latitude != null ? Number(latitude) : null,
-        longitude: longitude != null ? Number(longitude) : null,
-        city,
-        state,
-        country,
+        sizeSqM: farmSizeSqM != null && farmSizeSqM !== '' ? Number(farmSizeSqM) : null,
+        farmSizeAcres: farmSizeAcres ? String(farmSizeAcres) : null,
+        totalPonds: totalPonds != null && totalPonds !== ''
+          ? Number(totalPonds)
+          : pondList.length,
+        city: city ?? '',
+        state: state ?? '',
+        country: country ?? '',
         ponds: {
-          create: {
-            name: pondName,
-            number: pondNumber,
-            pondType: pondType ?? null,
-            lengthM,
-            widthM,
-            depthM,
+          create: pondList.map((p, idx) => ({
+            name: p.pondName,
+            number: Number(p.pondNumber ?? idx + 1),
+            pondType: p.pondType ?? null,
+            lengthM: Number(p.lengthM),
+            widthM: Number(p.widthM),
+            depthM: Number(p.depthM),
             cycles: {
               create: {
-                fishSpecies: fishSpecies ?? null,
-                cultureSystem: cultureSystem ?? null,
-                quantityStocked,
-                averageWeightAtStockingG,
-                fingerlingPrice,
-                stockingDate: new Date(stockingDate),
-                proposedSalesDate: proposedSalesDate ? new Date(proposedSalesDate) : null,
+                fishSpecies: normalizeFishSpecies(p.fishSpecies),
+                cultureSystem: parseCultureSystem(p.cultureSystem),
+                currency: currencyCode,
+                quantityStocked: Number(p.quantityStocked),
+                averageWeightAtStockingG: Number(p.averageWeightAtStockingG),
+                fingerlingPrice: Number(p.fingerlingPrice),
+                stockingDate: new Date(p.stockingDate),
+                proposedSalesDate: p.proposedSalesDate ? new Date(p.proposedSalesDate) : null,
                 feedName: feedName ?? null,
                 feedType: feedType ?? null,
                 feedMaker: feedMaker ?? null,
-                feedBags: feedBags != null ? Number(feedBags) : null,
-                desiredCrudeProteinPct,
-                desiredFeedQuantityKg,
+                feedBags: feedBags != null && feedBags !== '' ? Number(feedBags) : null,
+                desiredCrudeProteinPct: protein,
+                desiredFeedQuantityKg: Number(desiredFeedQuantityKg ?? 1500),
                 waterSource: waterSource ?? null,
-                initialPh: initialPh != null ? Number(initialPh) : null,
-                initialDissolvedOxygenMgL: initialDissolvedOxygenMgL != null ? Number(initialDissolvedOxygenMgL) : null,
+                initialPh: ph,
+                initialDissolvedOxygenMgL: doMg,
               },
             },
-          },
+          })),
         },
       },
-      include: { ponds: { include: { cycles: true } } },
+      include: { ponds: { include: { cycles: true }, orderBy: { number: 'asc' } } },
     });
 
-    const cycle = farm.ponds[0]!.cycles[0]!;
+    const firstPond = farm.ponds[0]!;
+    const cycle = firstPond.cycles[0]!;
     const token = signToken({ userId: user.id, email: user.email, role: user.role });
-    res.status(201).json({ farmId: farm.id, pondId: farm.ponds[0]!.id, cycleId: cycle.id, token, userId: user.id });
+
+    if (isNewUser && email) {
+      const confirmBody = [
+        `Welcome to Fishmaster, ${farmerName ?? user.name}.`,
+        `Your farm “${farmName}” is registered with ${pondList.length} pond(s).`,
+        'You can sign in anytime with this email.',
+      ].join('\n\n');
+
+      await prisma.memberMessage.create({
+        data: {
+          userId: user.id,
+          title: 'Registration confirmed',
+          body: confirmBody,
+          pondLabel: firstPond.name,
+        },
+      });
+
+      // Ops inbox / email — never block registration on mail failure
+      void sendRegistrationConfirmation({
+        email: String(email),
+        farmerName: String(farmerName ?? user.name),
+        farmName: String(farmName ?? farm.name),
+      }).catch((err) => console.warn('[registration] confirmation mail failed', err));
+    }
+
+    res.status(201).json({
+      farmId: farm.id,
+      pondId: firstPond.id,
+      cycleId: cycle.id,
+      pondIds: farm.ponds.map((p) => p.id),
+      cycleIds: farm.ponds.flatMap((p) => p.cycles.map((c) => c.id)),
+      token,
+      userId: user.id,
+    });
   } catch (err) {
     res.status(400).json({ error: String(err) });
   }
@@ -267,7 +503,12 @@ cyclesRouter.get('/:id/report', async (req, res) => {
       return;
     }
     const report = generateStockCycleReport(toStockCycleInput(cycle));
-    res.json({ cycleId: cycle.id, pondName: cycle.pond.name, report });
+    res.json({
+      cycleId: cycle.id,
+      pondName: cycle.pond.name,
+      report,
+      display: buildDisplayPayload(cycle),
+    });
   } catch (err) {
     res.status(400).json({ error: String(err) });
   }

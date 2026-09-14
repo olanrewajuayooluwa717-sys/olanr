@@ -1,11 +1,13 @@
 'use client';
 
 import Link from 'next/link';
+import { useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { clearAuth, getEmail, getRole } from '../lib/api';
 
 export type AdminSection =
   | 'members'
+  | 'directory'
   | 'broadcasts'
   | 'messages'
   | 'reports'
@@ -20,6 +22,7 @@ const NAV: {
   children?: { label: string; href: string }[];
 }[] = [
   { id: 'members', label: 'Members', href: '/admin?section=members' },
+  { id: 'directory', label: 'By location', href: '/admin?section=directory' },
   { id: 'reports', label: 'Reports', href: '/admin?section=reports' },
   { id: 'staff', label: 'Staff', href: '/admin?section=staff' },
   {
@@ -52,6 +55,7 @@ export function AdminShell({
   const active = sectionProp ?? parseAdminSection(searchParams.get('section'));
   const email = getEmail();
   const role = getRole();
+  const [navOpen, setNavOpen] = useState(false);
 
   const logout = () => {
     clearAuth();
@@ -59,8 +63,14 @@ export function AdminShell({
   };
 
   return (
-    <div style={styles.root}>
-      <aside style={styles.sidebar}>
+    <div className="admin-root" style={styles.root}>
+      <button
+        type="button"
+        className={`admin-backdrop${navOpen ? ' is-open' : ''}`}
+        aria-label="Close menu"
+        onClick={() => setNavOpen(false)}
+      />
+      <aside className={`admin-sidebar${navOpen ? ' is-open' : ''}`} style={styles.sidebar}>
         <div style={styles.brandBlock}>
           <Link href="/admin" style={styles.brand}>
             Fishmaster
@@ -75,6 +85,7 @@ export function AdminShell({
               <div key={item.id}>
                 <Link
                   href={item.href}
+                  onClick={() => setNavOpen(false)}
                   style={{
                     ...styles.navItem,
                     ...(isActive ? styles.navItemActive : {}),
@@ -86,7 +97,7 @@ export function AdminShell({
                 {item.children && isActive && (
                   <div style={styles.subNav}>
                     {item.children.map((child) => (
-                      <Link key={child.href} href={child.href} style={styles.subNavItem}>
+                      <Link key={child.href} href={child.href} onClick={() => setNavOpen(false)} style={styles.subNavItem}>
                         {child.label}
                       </Link>
                     ))}
@@ -115,7 +126,18 @@ export function AdminShell({
       </aside>
 
       <div style={styles.main}>
-        <header style={styles.topbar}>
+        <header className="admin-topbar" style={styles.topbar}>
+          <button
+            type="button"
+            className="admin-menu-btn"
+            aria-label="Open menu"
+            aria-expanded={navOpen}
+            onClick={() => setNavOpen((open) => !open)}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
           <nav style={styles.breadcrumb} aria-label="Breadcrumb">
             <Link href="/admin" style={styles.crumbLink}>
               Home
@@ -125,9 +147,9 @@ export function AdminShell({
               {NAV.find((n) => n.id === active)?.label ?? 'Admin'}
             </span>
           </nav>
-          <span style={styles.envHint}>Administrative backend</span>
+          <span className="admin-env" style={styles.envHint}>Administrative backend</span>
         </header>
-        <div style={styles.content}>{children}</div>
+        <div className="admin-content">{children}</div>
       </div>
     </div>
   );
@@ -143,6 +165,13 @@ function NavIcon({ id, active }: { id: AdminSection; active: boolean }) {
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
           <circle cx="9" cy="7" r="4" />
           <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+      );
+    case 'directory':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={common}>
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+          <circle cx="12" cy="10" r="3" />
         </svg>
       );
     case 'reports':
@@ -194,22 +223,13 @@ function NavIcon({ id, active }: { id: AdminSection; active: boolean }) {
 
 const styles: Record<string, React.CSSProperties> = {
   root: {
-    display: 'flex',
-    minHeight: '100vh',
     background: '#f8fafc',
     color: '#0f172a',
     fontFamily: '"Segoe UI", "Helvetica Neue", sans-serif',
   },
   sidebar: {
-    width: 240,
-    flexShrink: 0,
     background: '#fff',
     borderRight: '1px solid #e2e8f0',
-    display: 'flex',
-    flexDirection: 'column',
-    position: 'sticky',
-    top: 0,
-    height: '100vh',
   },
   brandBlock: {
     padding: '1.25rem 1.25rem 1rem',
@@ -325,11 +345,7 @@ const styles: Record<string, React.CSSProperties> = {
   topbar: {
     background: '#fff',
     borderBottom: '1px solid #e2e8f0',
-    padding: '0.85rem 1.75rem',
-    display: 'flex',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    gap: '1rem',
   },
   breadcrumb: {
     display: 'flex',
@@ -349,12 +365,6 @@ const styles: Record<string, React.CSSProperties> = {
     textTransform: 'uppercase',
     letterSpacing: '0.06em',
   },
-  content: {
-    padding: '1.5rem 1.75rem 2.5rem',
-    maxWidth: 1100,
-    width: '100%',
-    boxSizing: 'border-box',
-  },
 };
 
 export function AdminPanel({
@@ -369,7 +379,7 @@ export function AdminPanel({
   children: React.ReactNode;
 }) {
   return (
-    <section style={panelStyles.panel}>
+    <section className="admin-panel" style={panelStyles.panel}>
       <div style={panelStyles.header}>
         <h1 style={panelStyles.title}>
           {title}
@@ -384,9 +394,9 @@ export function AdminPanel({
   );
 }
 
-export function AdminTable({ children }: { children: React.ReactNode }) {
+export function AdminTable({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div style={{ overflowX: 'auto' }}>
+    <div className={['admin-table-wrap', className].filter(Boolean).join(' ')} style={{ overflowX: 'auto' }}>
       <table style={panelStyles.table}>{children}</table>
     </div>
   );
@@ -397,9 +407,10 @@ export const adminBtn: React.CSSProperties = {
   color: '#fff',
   border: 'none',
   borderRadius: 6,
-  padding: '0.45rem 1rem',
+  padding: '0.55rem 1rem',
+  minHeight: 44,
   cursor: 'pointer',
-  fontSize: '0.85rem',
+  fontSize: '0.9rem',
   fontWeight: 600,
 };
 
@@ -418,7 +429,8 @@ export const adminInput: React.CSSProperties = {
   padding: '0.5rem 0.7rem',
   borderRadius: 6,
   border: '1px solid #e2e8f0',
-  fontSize: '0.9rem',
+  fontSize: '16px',
+  minHeight: 44,
   background: '#fff',
   width: '100%',
   boxSizing: 'border-box',
@@ -427,6 +439,7 @@ export const adminInput: React.CSSProperties = {
 export const adminSearch: React.CSSProperties = {
   ...adminInput,
   maxWidth: 280,
+  minHeight: 44,
 };
 
 const panelStyles: Record<string, React.CSSProperties> = {

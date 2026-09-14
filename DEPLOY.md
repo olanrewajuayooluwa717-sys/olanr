@@ -30,27 +30,13 @@ See also: [docs/PRODUCTION_CHECKLIST.md](./docs/PRODUCTION_CHECKLIST.md) · [doc
 
 ## Part 1 — Database
 
-### Option A: Render PostgreSQL (default in `render.yaml`)
+### Database: Neon (current default)
 
-Render Blueprint creates `fishmaster-db` and wires `DATABASE_URL` automatically. No extra steps.
+`render.yaml` does **not** create a Render Postgres. Members already live in Neon. A new Render database would be empty.
 
-### Option B: Neon PostgreSQL (keep your existing DB)
-
-1. In [Neon console](https://console.neon.tech), copy the **pooled** connection string.
-2. Edit `render.yaml` before Blueprint deploy **or** configure manually after:
-   - Delete the `databases:` block at the bottom.
-   - Remove the `fromDatabase` section under `DATABASE_URL`.
-   - In Render → **fishmaster-api** → **Environment**, set `DATABASE_URL` to your Neon URL.
-3. Apply schema once (from your machine):
-   ```powershell
-   $env:DATABASE_URL="postgresql://..."   # Neon URL
-   npm run db:push -w @fishmaster/db
-   ```
-4. Optional demo data (first time only):
-   ```powershell
-   $env:SEED_ON_DEPLOY="true"
-   npm run db:seed -w @fishmaster/db
-   ```
+1. In Render → **fishmaster-api** → **Environment**, set `DATABASE_URL` to the Neon **direct** URL (not the `-pooler` host). `prisma db push` in the Render build cannot use the pooler.
+2. Leave `SEED_ON_DEPLOY=false`. Seeding again is not required; demo logins already exist in that database.
+3. Schema is applied on every deploy by `npm run db:push` in the Render build.
 
 > **Note:** `db:push` also runs on every Render deploy (see `buildCommand` in `render.yaml`). For mature production, migrate to `prisma migrate deploy`.
 
@@ -62,7 +48,7 @@ Render Blueprint creates `fishmaster-db` and wires `DATABASE_URL` automatically.
 
 1. https://dashboard.render.com/blueprints → **New Blueprint Instance**.
 2. Connect your GitHub repo.
-3. Review services from `render.yaml`: **fishmaster-api** (+ **fishmaster-db** if Option A).
+3. Review the **fishmaster-api** service. When asked for `DATABASE_URL`, paste the Neon direct URL. Do not add a Render database.
 4. Click **Apply**. Wait ~5–10 minutes.
 
 ### Step 2: Verify health

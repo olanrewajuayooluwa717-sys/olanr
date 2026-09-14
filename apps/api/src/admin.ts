@@ -5,6 +5,7 @@ import { requireRole } from './role-middleware';
 import { routeParam } from './params';
 import type { AdminContentType } from './billing-config';
 import { CONTENT_TYPES } from './billing-config';
+import { uploadSingle } from './uploads';
 
 export const adminRouter = Router();
 const admin = requireRole('super_admin', 'manager');
@@ -14,24 +15,146 @@ function isContentType(v: string): v is AdminContentType {
   return (CONTENT_TYPES as readonly string[]).includes(v);
 }
 
-/** GET /api/admin/members */
-adminRouter.get('/members', admin, async (_req, res) => {
+const AD_PLACES = ['home', 'article', 'information', 'picture', 'video'] as const;
+
+function cleanPlacements(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return [...new Set(raw.filter((p): p is string => typeof p === 'string' && (AD_PLACES as readonly string[]).includes(p)))];
+}
+
+/** GET /api/admin/members — optional ?category=&state=&city=&country= */
+adminRouter.get('/members', admin, async (req, res) => {
+  const category = typeof req.query.category === 'string' ? req.query.category.trim() : '';
+  const state = typeof req.query.state === 'string' ? req.query.state.trim() : '';
+  const city = typeof req.query.city === 'string' ? req.query.city.trim() : '';
+  const country = typeof req.query.country === 'string' ? req.query.country.trim() : '';
+
   const members = await prisma.user.findMany({
+    where: {
+      ...(category ? { categories: { has: category } } : {}),
+      ...(state || city || country
+        ? {
+            OR: [
+              {
+                farms: {
+                  some: {
+                    ...(state ? { state: { contains: state, mode: 'insensitive' } } : {}),
+                    ...(city ? { city: { contains: city, mode: 'insensitive' } } : {}),
+                    ...(country ? { country: { contains: country, mode: 'insensitive' } } : {}),
+                  },
+                },
+              },
+              {
+                ...(state ? { state: { contains: state, mode: 'insensitive' } } : {}),
+                ...(country ? { country: { contains: country, mode: 'insensitive' } } : {}),
+              },
+            ],
+          }
+        : {}),
+    },
     orderBy: { createdAt: 'desc' },
     select: {
       id: true, name: true, email: true, role: true,
       phone: true, gender: true,
+      categories: true,
+      estimatedFishOutputYear: true,
+      state: true, country: true, lga: true,
       subscriptionTier: true, subscriptionStatus: true, createdAt: true,
       _count: { select: { farms: true } },
       farms: {
         select: {
           id: true, name: true, city: true, state: true, country: true,
+          location: true, lga: true,
           latitude: true, longitude: true,
         },
       },
     },
   });
   res.json(members);
+});
+
+/**
+ * GET /api/admin/directory — location × activity overview
+ * Groups members by state/country with their categories (what they do where).
+ */
+adminRouter.get('/directory', admin, async (req, res) => {
+  const category = typeof req.query.category === 'string' ? req.query.category.trim() : '';
+  const state = typeof req.query.state === 'string' ? req.query.state.trim() : '';
+  const country = typeof req.query.country === 'string' ? req.query.country.trim() : '';
+
+  const members = await prisma.user.findMany({
+    where: {
+      role: 'member',
+      ...(category ? { categories: { has: category } } : {}),
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      categories: true,
+      state: true,
+      country: true,
+      lga: true,
+      farms: {
+        select: { name: true, city: true, state: true, country: true, location: true, lga: true },
+      },
+    },
+    orderBy: { name: 'asc' },
+  });
+
+  const rows = members
+    .map((m) => {
+      const farm = m.farms[0];
+      const locState = farm?.state || m.state || '';
+      const locCountry = farm?.country || m.country || '';
+      const locCity = farm?.city || '';
+      const locLga = farm?.lga || m.lga || '';
+      return {
+        id: m.id,
+        name: m.name,
+        email: m.email,
+        categories: m.categories,
+        location: {
+          city: locCity,
+          lga: locLga,
+          state: locState,
+          country: locCountry,
+          farmName: farm?.name ?? null,
+          address: farm?.location ?? null,
+        },
+      };
+    })
+    .filter((r) => {
+      if (state && !r.location.state.toLowerCase().includes(state.toLowerCase())) return false;
+      if (country && !r.location.country.toLowerCase().includes(country.toLowerCase())) return false;
+      return true;
+    });
+
+  // Aggregate: by location key → category counts
+  const byLocation: Record<string, { state: string; country: string; city: string; categoryCounts: Record<string, number>; memberCount: number }> = {};
+  for (const r of rows) {
+    const key = `${r.location.country}|${r.location.state}|${r.location.city}`;
+    if (!byLocation[key]) {
+      byLocation[key] = {
+        state: r.location.state,
+        country: r.location.country,
+        city: r.location.city,
+        categoryCounts: {},
+        memberCount: 0,
+      };
+    }
+    byLocation[key].memberCount += 1;
+    for (const c of r.categories) {
+      byLocation[key].categoryCounts[c] = (byLocation[key].categoryCounts[c] ?? 0) + 1;
+    }
+  }
+
+  res.json({
+    members: rows,
+    byLocation: Object.values(byLocation).sort((a, b) =>
+      `${a.country}${a.state}`.localeCompare(`${b.country}${b.state}`),
+    ),
+  });
 });
 
 /** GET /api/admin/members/:id — full member detail */
@@ -42,6 +165,7 @@ adminRouter.get('/members/:id', admin, async (req, res) => {
     select: {
       id: true, name: true, surname: true, email: true, phone: true, gender: true,
       ageRange: true, role: true, lga: true, state: true, country: true, postcode: true,
+      categories: true, estimatedFishOutputYear: true,
       subscriptionTier: true, subscriptionStatus: true, createdAt: true,
       farms: {
         include: {
@@ -151,39 +275,81 @@ adminRouter.get('/posts', admin, async (_req, res) => {
   res.json(posts);
 });
 
-/** POST /api/admin/posts — broadcast to all members */
-adminRouter.post('/posts', admin, async (req, res) => {
-  const { type, title, body, mediaUrl } = req.body as {
-    type: string;
-    title: string;
-    body: string;
-    mediaUrl?: string;
-  };
-  if (!isContentType(type)) {
-    res.status(400).json({ error: 'Invalid content type' });
+/** POST /api/admin/uploads — store a video or picture, return a public path */
+adminRouter.post('/uploads', admin, uploadSingle, (req, res) => {
+  const file = (req as typeof req & { file?: { filename: string; originalname: string } }).file;
+  if (!file) {
+    res.status(400).json({ error: 'Choose a video or picture file' });
     return;
   }
-  const post = await prisma.contentPost.create({
-    data: {
-      type,
-      title,
-      body,
-      mediaUrl: mediaUrl ?? null,
-      authorId: req.user!.userId,
-      published: true,
-    },
+  res.status(201).json({
+    url: `/uploads/${file.filename}`,
+    name: file.originalname,
   });
-  res.status(201).json(post);
+});
+
+/** POST /api/admin/posts — broadcast to all members */
+adminRouter.post('/posts', admin, async (req, res) => {
+  try {
+    const { type, title, body, mediaUrl, placements } = req.body as {
+      type: string;
+      title: string;
+      body: string;
+      mediaUrl?: string;
+      placements?: unknown;
+    };
+    if (!title?.trim()) {
+      res.status(400).json({ error: 'Title is required' });
+      return;
+    }
+    const caption = body?.trim() || (type === 'video' || type === 'picture' || type === 'advert' ? title.trim() : '');
+    if (!caption) {
+      res.status(400).json({ error: 'Title and body are required' });
+      return;
+    }
+    if (!isContentType(type)) {
+      res.status(400).json({ error: 'Invalid content type' });
+      return;
+    }
+    if (mediaUrl?.trim().startsWith('data:')) {
+      res.status(400).json({ error: 'Upload the file with the file picker instead of pasting it.' });
+      return;
+    }
+    if ((type === 'video' || type === 'picture') && !mediaUrl?.trim()) {
+      res.status(400).json({ error: type === 'video' ? 'Upload a video file first' : 'Upload an image file first' });
+      return;
+    }
+    const places = cleanPlacements(placements);
+    if (type === 'advert' && places.length === 0) {
+      res.status(400).json({ error: 'Choose at least one place for this ad' });
+      return;
+    }
+    const post = await prisma.contentPost.create({
+      data: {
+        type,
+        title: title.trim(),
+        body: caption,
+        mediaUrl: mediaUrl?.trim() || null,
+        placements: type === 'advert' ? places : [],
+        authorId: req.user!.userId,
+        published: true,
+      },
+    });
+    res.status(201).json(post);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Could not publish' });
+  }
 });
 
 /** PATCH /api/admin/posts/:id */
 adminRouter.patch('/posts/:id', admin, async (req, res) => {
-  const { title, body, type, mediaUrl, published } = req.body as {
+  const { title, body, type, mediaUrl, published, placements } = req.body as {
     title?: string;
     body?: string;
     type?: string;
     mediaUrl?: string | null;
     published?: boolean;
+    placements?: unknown;
   };
   if (type != null && !isContentType(type)) {
     res.status(400).json({ error: 'Invalid content type' });
@@ -195,6 +361,14 @@ adminRouter.patch('/posts/:id', admin, async (req, res) => {
   if (type != null) data.type = type;
   if (mediaUrl !== undefined) data.mediaUrl = mediaUrl;
   if (published != null) data.published = published;
+  if (placements !== undefined || type === 'advert') {
+    const places = cleanPlacements(placements);
+    if ((type === 'advert' || placements !== undefined) && places.length === 0 && type === 'advert') {
+      res.status(400).json({ error: 'Choose at least one place for this ad' });
+      return;
+    }
+    if (placements !== undefined) data.placements = places;
+  }
   const post = await prisma.contentPost.update({
     where: { id: routeParam(req, 'id') },
     data,
