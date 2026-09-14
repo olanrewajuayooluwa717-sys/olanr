@@ -19,8 +19,10 @@ services:
     name: fishmaster-api
     runtime: node
     plan: free
-    region: virginia
-    buildCommand: npm install --legacy-peer-deps --ignore-scripts && npm run build:api && npm run db:push -w @fishmaster/db
+    # NODE_ENV=production makes npm skip devDependencies, which drops
+    # TypeScript and @types/* and fails `tsc` (TS7016 on express).
+    # Install with development so the build can typecheck, then start in production.
+    buildCommand: NODE_ENV=development npm install --legacy-peer-deps --ignore-scripts --include=dev && npm run build:api && npm run db:push -w @fishmaster/db
     startCommand: npm run start:api
     initialDeployHook: npm run db:seed-if-enabled -w @fishmaster/db
     healthCheckPath: /health
