@@ -16,7 +16,8 @@ export default function AccountScreen() {
   useEffect(() => {
     apiFetch('/api/billing/status').then(setStatus).catch(() => {});
     fetch(`${API_URL}/api/billing/plans`)
-      .then((r) => r.json()).then(setPlans);
+      .then((r) => r.json())
+      .then((data) => setPlans(Array.isArray(data) ? data : Array.isArray(data?.plans) ? data.plans : []));
   }, []);
 
   const subscribe = async (tier: string) => {
