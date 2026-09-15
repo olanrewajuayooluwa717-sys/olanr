@@ -4,15 +4,25 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { clearAuth, getToken, getRole, getEmail } from '../lib/api';
+import { DesktopTodayRail } from './DesktopTodayRail';
 
 const NAV_LINKS = [
   { href: '/', label: 'Home', match: (p: string) => p === '/' || p.startsWith('/display') },
-  { href: '/economics', label: 'Economics', match: (p: string) => p.startsWith('/economics'), staffOnly: true },
+  { href: '/content/video', label: 'Videos', match: (p: string) => p.startsWith('/content/video') },
   { href: '/marketplace', label: 'Marketplace', match: (p: string) => p.startsWith('/marketplace') },
   { href: '/reports', label: 'Reports', match: (p: string) => p.startsWith('/reports') },
   { href: '/messages', label: 'Messages', match: (p: string) => p.startsWith('/messages'), auth: true },
   { href: '/subscribe', label: 'Plans', match: (p: string) => p.startsWith('/subscribe') },
+  { href: '/economics', label: 'Economics', match: (p: string) => p.startsWith('/economics'), staffOnly: true },
 ] as const;
+
+function visibleLinks(loggedIn: boolean, isAdmin: boolean) {
+  return NAV_LINKS.filter((l) => {
+    if ('auth' in l && l.auth && !loggedIn) return false;
+    if ('staffOnly' in l && l.staffOnly && !isAdmin) return false;
+    return true;
+  });
+}
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? '/';
@@ -39,6 +49,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
+  const links = visibleLinks(loggedIn, isAdmin);
+
   return (
     <div className="member-main" style={{ minHeight: '100vh', background: '#f0f7fa' }}>
       <nav
@@ -50,99 +62,137 @@ export function Shell({ children }: { children: React.ReactNode }) {
         }}
       >
         <div className="member-nav-inner">
-        <Link href="/" style={{ color: '#fff', fontWeight: 700, textDecoration: 'none', marginRight: '0.75rem', fontSize: '1.05rem' }}>
-          Fishmaster
-        </Link>
-        <span className="member-nav-links" style={{ display: 'contents' }}>
-        {NAV_LINKS.filter((l) => {
-          if ('auth' in l && l.auth && !loggedIn) return false;
-          if ('staffOnly' in l && l.staffOnly && !isAdmin) return false;
-          return true;
-        }).map((link) => {
-          const active = link.match(pathname);
-          return (
-            <Link
-              key={link.href}
-              href={link.href}
-              style={{
-                color: active ? '#fff' : '#b8d4e3',
-                textDecoration: 'none',
-                padding: '0.35rem 0.7rem',
-                borderRadius: 6,
-                background: active ? 'rgba(255,255,255,0.15)' : 'transparent',
-                fontWeight: active ? 600 : 400,
-                fontSize: '0.9rem',
-              }}
-            >
-              {link.label}
-            </Link>
-          );
-        })}
-        </span>
-        {isAdmin && (
-          <Link
-            href="/admin"
-            style={{
-              color: '#0d4f6e',
-              background: '#fcd34d',
-              textDecoration: 'none',
-              padding: '0.35rem 0.7rem',
-              borderRadius: 6,
-              fontWeight: 600,
-              fontSize: '0.85rem',
-            }}
-          >
-            Admin
+          <Link href="/" style={{ color: '#fff', fontWeight: 700, textDecoration: 'none', marginRight: '0.75rem', fontSize: '1.05rem' }}>
+            Fishmaster
           </Link>
-        )}
-        <span style={{ flex: 1 }} />
-        {loggedIn ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            {email && (
-              <span className="member-email" style={{ fontSize: '0.8rem', color: '#b8d4e3', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {email}
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={logout}
-              style={{
-                background: 'transparent',
-                border: '1px solid #b8d4e3',
-                color: '#fff',
-                borderRadius: 6,
-                padding: '0.3rem 0.75rem',
-                cursor: 'pointer',
-                fontSize: '0.85rem',
-              }}
-            >
-              Logout
-            </button>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <Link href="/register" style={{ color: '#b8d4e3', textDecoration: 'none', fontSize: '0.9rem' }}>
-              Register
-            </Link>
+          <span className="member-nav-links" style={{ display: 'contents' }}>
+            {links.map((link) => {
+              const active = link.match(pathname);
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  style={{
+                    color: active ? '#fff' : '#b8d4e3',
+                    textDecoration: 'none',
+                    padding: '0.35rem 0.7rem',
+                    borderRadius: 6,
+                    background: active ? 'rgba(255,255,255,0.15)' : 'transparent',
+                    fontWeight: active ? 600 : 400,
+                    fontSize: '0.9rem',
+                  }}
+                >
+                  {link.label}
+                </Link>
+              );
+            })}
+          </span>
+          {isAdmin && (
             <Link
-              href="/login"
+              href="/admin"
               style={{
                 color: '#0d4f6e',
-                background: '#fff',
+                background: '#fcd34d',
                 textDecoration: 'none',
-                padding: '0.35rem 0.85rem',
+                padding: '0.35rem 0.7rem',
                 borderRadius: 6,
                 fontWeight: 600,
                 fontSize: '0.85rem',
               }}
             >
-              Login
+              Admin
             </Link>
-          </div>
-        )}
+          )}
+          <span style={{ flex: 1 }} />
+          {loggedIn ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              {email && (
+                <span className="member-email" style={{ fontSize: '0.8rem', color: '#b8d4e3', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {email}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={logout}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid #b8d4e3',
+                  color: '#fff',
+                  borderRadius: 6,
+                  padding: '0.3rem 0.75rem',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                }}
+              >
+                Logout
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <Link href="/register" style={{ color: '#b8d4e3', textDecoration: 'none', fontSize: '0.9rem' }}>
+                Register
+              </Link>
+              <Link
+                href="/login"
+                style={{
+                  color: '#0d4f6e',
+                  background: '#fff',
+                  textDecoration: 'none',
+                  padding: '0.35rem 0.85rem',
+                  borderRadius: 6,
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                }}
+              >
+                Login
+              </Link>
+            </div>
+          )}
         </div>
       </nav>
-      {children}
+
+      <div className="member-body">
+        <aside className="member-side" aria-label="Main">
+          <Link href="/" className="side-brand">
+            Fishmaster
+          </Link>
+          <nav className="side-nav">
+            {links.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={link.match(pathname) ? 'is-active' : undefined}
+              >
+                {link.label}
+              </Link>
+            ))}
+            {isAdmin && (
+              <Link href="/admin" className={pathname.startsWith('/admin') ? 'is-active side-admin' : 'side-admin'}>
+                Admin
+              </Link>
+            )}
+          </nav>
+          <div className="side-foot">
+            {loggedIn ? (
+              <>
+                {email && <span className="side-email">{email}</span>}
+                <button type="button" onClick={logout} className="side-logout">
+                  Log out
+                </button>
+              </>
+            ) : (
+              <>
+                <Link href="/login" className="side-logout">Sign in</Link>
+                <Link href="/register" className="rail-ghost">Register</Link>
+              </>
+            )}
+          </div>
+        </aside>
+
+        <div className="member-center">{children}</div>
+        <DesktopTodayRail />
+      </div>
+
       <PhoneTabBar pathname={pathname} loggedIn={loggedIn} isAdmin={isAdmin} onLogout={logout} />
     </div>
   );

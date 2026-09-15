@@ -160,7 +160,7 @@ export function AppDisplayPage({
         </div>
 
         {ponds.length > 1 && cycleId && onSwitchPond && (
-          <label className="ig-profile-pond" style={{ display: 'block', marginTop: 12 }}>
+          <label className="ig-profile-pond ig-desktop-hide" style={{ display: 'block', marginTop: 12 }}>
             <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden' }}>Switch pond</span>
             <select
               value={cycleId}
@@ -177,7 +177,7 @@ export function AppDisplayPage({
 
       <div style={stories}>
         {onLog && (
-          <button type="button" onClick={onLog} style={storyBtn}>
+          <button type="button" className="ig-desktop-hide" onClick={onLog} style={storyBtn}>
             <span style={{ ...storyRing, boxShadow: '0 0 0 2px #fff, 0 0 0 3px #f59e0b' }}>
               <span style={{ ...storyInner, background: '#fff7ed', color: '#c2410c' }}>+</span>
             </span>

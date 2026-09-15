@@ -99,6 +99,25 @@ export default function HomePage() {
     }
   }, []);
 
+  useEffect(() => {
+    const onOpenLog = () => setLogOpen(true);
+    const onSwitch = (e: Event) => {
+      const id = (e as CustomEvent<{ id: string }>).detail?.id;
+      if (id) load(id);
+    };
+    window.addEventListener('fishmaster:open-log', onOpenLog);
+    window.addEventListener('fishmaster:switch-pond', onSwitch);
+    return () => {
+      window.removeEventListener('fishmaster:open-log', onOpenLog);
+      window.removeEventListener('fishmaster:switch-pond', onSwitch);
+    };
+  }, []);
+
+  const afterLogSaved = () => {
+    load(cycleId);
+    window.dispatchEvent(new CustomEvent('fishmaster:refresh-today'));
+  };
+
   return (
     <main className="phone-frame" style={{ background: '#fff', minHeight: '70vh' }}>
       {error && <div style={{ padding: '8px 16px 0' }}><Flash tone="warn">{error}</Flash></div>}
@@ -120,7 +139,7 @@ export default function HomePage() {
         open={logOpen}
         cycleId={cycleId}
         onClose={() => setLogOpen(false)}
-        onSaved={() => load(cycleId)}
+        onSaved={afterLogSaved}
         onMessage={showFlash}
       />
     </main>

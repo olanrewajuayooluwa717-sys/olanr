@@ -1,0 +1,209 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import {
+  fetchCycleReport,
+  fetchDashboard,
+  fetchUserCycles,
+  getToken,
+  setCycleId,
+} from '../lib/api';
+
+type TodayBits = {
+  cycleId: string | null;
+  farmName: string;
+  pondLabel: string;
+  species: string | null;
+  morningG: number | null;
+  eveningG: number | null;
+  dayInCycle: number | null;
+  feedDueKg: number | null;
+  fedKg: number | null;
+  note: string | null;
+};
+
+function sameDay(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+export function openPondLog() {
+  window.dispatchEvent(new CustomEvent('fishmaster:open-log'));
+}
+
+export function switchPond(id: string) {
+  setCycleId(id);
+  window.dispatchEvent(new CustomEvent('fishmaster:switch-pond', { detail: { id } }));
+}
+
+export function DesktopTodayRail() {
+  const pathname = usePathname() ?? '/';
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [ponds, setPonds] = useState<{ id: string; label: string }[]>([]);
+  const [today, setToday] = useState<TodayBits | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    const token = !!getToken();
+    setLoggedIn(token);
+    if (!token) {
+      setToday(null);
+      setPonds([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const cycles = await fetchUserCycles();
+      const pondList = cycles.map((c) => ({
+        id: c.id,
+        label: `${c.pond.farm.name} · ${c.pond.name}`,
+      }));
+      setPonds(pondList);
+
+      const saved = localStorage.getItem('fishmaster_cycle_id');
+      const { report, cycleId, pondName, display } = await fetchCycleReport(saved);
+      if (cycleId) setCycleId(cycleId);
+
+      const todayDate = new Date();
+      const row = report.dailyFeedCharts.flat().find((r) => sameDay(new Date(r.date), todayDate)) ?? null;
+
+      let feedDueKg: number | null = null;
+      let fedKg: number | null = null;
+      let dayInCulture: number | null = row?.dayInCycle ?? null;
+      let note: string | null = null;
+
+      if (cycleId) {
+        try {
+          const dash = await fetchDashboard(cycleId);
+          feedDueKg = dash.todayExpectedFeedKg ?? null;
+          fedKg = dash.todayActualFeedKg ?? null;
+          if (dash.dayInCulture) dayInCulture = dash.dayInCulture;
+          if (dash.pondCleaning?.dueToday) note = 'Cleaning due today';
+          else if (dash.pondCleaning?.daysUntilNextCleaning != null) {
+            note = `Clean in ${dash.pondCleaning.daysUntilNextCleaning}d`;
+          }
+        } catch {
+          /* rail still useful without dashboard */
+        }
+      }
+
+      setToday({
+        cycleId,
+        farmName: display?.farmName || pondName || 'Your farm',
+        pondLabel: display?.pond.name || pondName || 'Pond',
+        species: display?.stock.fishSpecies ?? null,
+        morningG: row?.morningFeedG ?? null,
+        eveningG: row?.eveningFeedG ?? null,
+        dayInCycle: dayInCulture,
+        feedDueKg,
+        fedKg,
+        note,
+      });
+    } catch {
+      setToday(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load, pathname]);
+
+  useEffect(() => {
+    const onRefresh = () => load();
+    window.addEventListener('fishmaster:refresh-today', onRefresh);
+    return () => window.removeEventListener('fishmaster:refresh-today', onRefresh);
+  }, [load]);
+
+  if (!loggedIn) {
+    return (
+      <aside className="member-rail" aria-label="Today">
+        <div className="rail-card">
+          <p className="rail-kicker">Today</p>
+          <h2 className="rail-title">Your pond log</h2>
+          <p className="rail-copy">Sign in to see today’s ration, switch ponds, and log feeding.</p>
+          <Link href="/login" className="rail-primary">Sign in</Link>
+          <Link href="/register" className="rail-ghost">Register</Link>
+        </div>
+      </aside>
+    );
+  }
+
+  return (
+    <aside className="member-rail" aria-label="Today">
+      <div className="rail-card">
+        <p className="rail-kicker">Today</p>
+        {loading && !today ? (
+          <p className="rail-copy">Loading pond…</p>
+        ) : today ? (
+          <>
+            <h2 className="rail-title">{today.farmName}</h2>
+            <p className="rail-meta">
+              {today.pondLabel}
+              {today.species ? ` · ${today.species}` : ''}
+              {today.dayInCycle != null ? ` · Day ${today.dayInCycle}` : ''}
+            </p>
+
+            <div className="rail-rations">
+              <div>
+                <span className="rail-label">Morning</span>
+                <strong>{today.morningG != null ? `${today.morningG.toFixed(0)} g` : '—'}</strong>
+              </div>
+              <div>
+                <span className="rail-label">Evening</span>
+                <strong>{today.eveningG != null ? `${today.eveningG.toFixed(0)} g` : '—'}</strong>
+              </div>
+            </div>
+
+            {today.feedDueKg != null && (
+              <p className="rail-copy">
+                {today.fedKg != null
+                  ? `Fed ${today.fedKg.toFixed(1)} / ${today.feedDueKg.toFixed(1)} kg`
+                  : `Feed due ${today.feedDueKg.toFixed(1)} kg`}
+              </p>
+            )}
+            {today.note && <p className="rail-note">{today.note}</p>}
+
+            <button type="button" className="rail-primary" onClick={openPondLog}>
+              Log today
+            </button>
+
+            {ponds.length > 1 && today.cycleId && (
+              <label className="rail-pond">
+                <span className="rail-label">Pond</span>
+                <select
+                  value={today.cycleId}
+                  onChange={(e) => {
+                    switchPond(e.target.value);
+                    window.setTimeout(load, 50);
+                  }}
+                >
+                  {ponds.map((p) => (
+                    <option key={p.id} value={p.id}>{p.label}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </>
+        ) : (
+          <>
+            <h2 className="rail-title">No active pond</h2>
+            <p className="rail-copy">Register a farm cycle to unlock today’s feed plan.</p>
+            <Link href="/register" className="rail-primary">Add farm</Link>
+          </>
+        )}
+      </div>
+
+      <div className="rail-card rail-card-soft">
+        <p className="rail-kicker">Quick</p>
+        <Link href="/content/video" className="rail-link">Videos</Link>
+        <Link href="/marketplace" className="rail-link">Marketplace</Link>
+        <Link href="/reports" className="rail-link">Reports</Link>
+      </div>
+    </aside>
+  );
+}
