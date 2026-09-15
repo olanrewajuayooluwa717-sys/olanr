@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { clearAuth, getToken, getRole, getEmail } from '../lib/api';
+import { BrandLogo } from './BrandLogo';
 import { DesktopTodayRail } from './DesktopTodayRail';
 
 const NAV_LINKS = [
@@ -62,9 +63,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         }}
       >
         <div className="member-nav-inner">
-          <Link href="/" style={{ color: '#fff', fontWeight: 700, textDecoration: 'none', marginRight: '0.75rem', fontSize: '1.05rem' }}>
-            Fishmaster
-          </Link>
+          <BrandLogo variant="compact" onDark className="member-brand" />
           <span className="member-nav-links" style={{ display: 'contents' }}>
             {links.map((link) => {
               const active = link.match(pathname);
@@ -153,9 +152,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
       <div className="member-body">
         <aside className="member-side" aria-label="Main">
-          <Link href="/" className="side-brand">
-            Fishmaster
-          </Link>
+          <BrandLogo variant="full" onDark className="side-brand" />
           <nav className="side-nav">
             {links.map((link) => (
               <Link

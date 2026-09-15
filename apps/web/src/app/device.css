@@ -207,6 +207,11 @@ textarea {
   flex-wrap: wrap;
 }
 
+.member-brand {
+  margin-right: 0.65rem;
+  flex-shrink: 0;
+}
+
 .ig-day-rail {
   display: flex;
   gap: 10px;
@@ -306,12 +311,15 @@ textarea {
   }
 
   .side-brand {
-    color: #fff;
-    font-weight: 750;
-    font-size: 1.15rem;
-    letter-spacing: -0.02em;
+    display: inline-flex;
+    align-items: center;
+    margin: 0 0 0.85rem;
+    padding: 0.15rem 0.25rem;
     text-decoration: none;
-    padding: 0.35rem 0.65rem 1rem;
+  }
+
+  .side-brand img {
+    max-width: 100%;
   }
 
   .side-nav {

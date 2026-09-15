@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { BrandLogo } from './BrandLogo';
 import { clearAuth, getEmail, getRole } from '../lib/api';
 
 export type AdminSection =
@@ -72,9 +73,7 @@ export function AdminShell({
       />
       <aside className={`admin-sidebar${navOpen ? ' is-open' : ''}`} style={styles.sidebar}>
         <div style={styles.brandBlock}>
-          <Link href="/admin" style={styles.brand}>
-            Fishmaster
-          </Link>
+          <BrandLogo href="/admin" variant="compact" />
           <span style={styles.brandSub}>Admin</span>
         </div>
 

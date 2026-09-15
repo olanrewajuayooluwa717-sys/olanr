@@ -22,6 +22,7 @@ import {
   validatePassword,
 } from '@fishmaster/shared-types';
 import { Card, btnStyle, inputStyle } from '../../components/Shell';
+import { BrandLogo } from '../../components/BrandLogo';
 import { registerFarm, setAuth } from '../../lib/api';
 
 type PondForm = {
@@ -240,6 +241,9 @@ export default function RegisterPage() {
 
   return (
     <main className="phone-frame" style={{ boxSizing: 'border-box', width: '100%', padding: 'max(1rem, env(safe-area-inset-top)) 1rem max(2rem, env(safe-area-inset-bottom))', background: '#f0f7fa', minHeight: '100dvh' }}>
+      <div style={{ marginBottom: '0.75rem' }}>
+        <BrandLogo variant="full" href="/" />
+      </div>
       <h1 style={{ color: '#0d4f6e' }}>Register</h1>
       <p style={{ color: '#555', marginBottom: '1rem' }}>
         Tell us who you are and what you do in aquaculture — you can pick more than one category.

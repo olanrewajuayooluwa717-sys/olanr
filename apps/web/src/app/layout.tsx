@@ -1,6 +1,15 @@
 import { Shell } from '../components/Shell';
 import './device.css';
 
+export const metadata = {
+  title: 'Fishmaster',
+  description: 'Fishmaster Limited — An African catfish company',
+  icons: {
+    icon: '/brand/logo-compact.png',
+    apple: '/brand/logo-compact.png',
+  },
+};
+
 export const viewport = {
   width: 'device-width',
   initialScale: 1,

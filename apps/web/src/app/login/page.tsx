@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card, btnStyle, inputStyle } from '../../components/Shell';
+import { BrandLogo } from '../../components/BrandLogo';
 import { login, setAuth } from '../../lib/api';
 
 export default function LoginPage() {
@@ -43,6 +44,9 @@ export default function LoginPage() {
         background: '#f0f7fa',
       }}
     >
+      <div style={{ marginBottom: '1.1rem' }}>
+        <BrandLogo variant="full" href="/" />
+      </div>
       <h1 style={{ color: '#0d4f6e', margin: '0 0 0.35rem', fontSize: '1.6rem' }}>Welcome back</h1>
       <p style={{ color: '#64748b', margin: '0 0 1.25rem', fontSize: '0.95rem' }}>
         Sign in to your farm dashboard, reports, and daily logs.
