@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import type { DailyFeedChartRow } from '@fishmaster/shared-types';
 import {
   fetchCycleReport,
   fetchDashboard,
@@ -68,7 +69,8 @@ export function DesktopTodayRail() {
       if (cycleId) setCycleId(cycleId);
 
       const todayDate = new Date();
-      const row = report.dailyFeedCharts.flat().find((r) => sameDay(new Date(r.date), todayDate)) ?? null;
+      const row =
+        report.dailyFeedCharts.flat().find((r: DailyFeedChartRow) => sameDay(new Date(r.date), todayDate)) ?? null;
 
       let feedDueKg: number | null = null;
       let fedKg: number | null = null;
