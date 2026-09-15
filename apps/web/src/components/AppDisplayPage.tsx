@@ -128,8 +128,8 @@ export function AppDisplayPage({
 
   return (
     <div className="phone-frame" style={shell}>
-      <header style={profile}>
-        <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+      <header className="ig-profile" style={profile}>
+        <div className="ig-profile-head" style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
           <div style={avatar}>{initials(farmer)}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: '1.05rem', letterSpacing: '-0.02em' }}>{name}</div>
@@ -137,13 +137,14 @@ export function AppDisplayPage({
           </div>
         </div>
 
-        <div style={statRow}>
+        <div className="ig-profile-stats" style={statRow}>
           <Stat n={display ? display.stock.quantityStocked.toLocaleString() : '—'} label="stocked" />
           <Stat n={mort[mort.length - 1] ? String(mort[mort.length - 1]!.closingStock) : '—'} label="left" />
           <Stat n={lastMonth ? `${lastMonth.expectedAvgWeightG.toFixed(0)}g` : '—'} label="m6 weight" />
           <Stat n={display ? `${(display.pond.volumeLiters / 1000).toFixed(1)}m³` : '—'} label="pond" />
         </div>
 
+        <div className="ig-profile-bio">
         <p style={{ margin: '10px 0 0', fontSize: '0.86rem', lineHeight: 1.45 }}>
           <strong>{species}</strong>
           <span style={{ color: '#737373' }}> · {locationLine}</span>
@@ -156,9 +157,10 @@ export function AppDisplayPage({
         {statusNote ? (
           <p style={{ margin: '10px 0 0', fontSize: '0.84rem', color: '#0d4f6e', fontWeight: 600 }}>{statusNote}</p>
         ) : null}
+        </div>
 
         {ponds.length > 1 && cycleId && onSwitchPond && (
-          <label style={{ display: 'block', marginTop: 12 }}>
+          <label className="ig-profile-pond" style={{ display: 'block', marginTop: 12 }}>
             <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden' }}>Switch pond</span>
             <select
               value={cycleId}
@@ -209,11 +211,11 @@ export function AppDisplayPage({
                 : `${species} · ${display ? fmtDate(display.stock.stockingDate) : 'stocked'} · swipe the days`
             }
           >
-            <div style={hero}>
+            <div className="ig-hero" style={hero}>
               <div style={{ fontSize: '0.75rem', letterSpacing: '0.08em', textTransform: 'uppercase', opacity: 0.85 }}>
                 {display?.pond.name ?? pondName ?? 'Pond'} · twice daily
               </div>
-              <div style={{ fontSize: '2.4rem', fontWeight: 700, letterSpacing: '-0.04em', marginTop: 8 }}>
+              <div className="ig-hero-value" style={{ fontSize: '2.4rem', fontWeight: 700, letterSpacing: '-0.04em', marginTop: 8 }}>
                 {todayRow ? `${todayRow.morningFeedG.toFixed(0)}g` : `${nowMonth?.monthlyFeedKg.toFixed(0) ?? '—'} kg`}
               </div>
               <div style={{ opacity: 0.9, marginTop: 4 }}>
@@ -232,11 +234,11 @@ export function AppDisplayPage({
               <strong>Daily ration</strong>
               <span style={{ color: '#737373' }}> · month {feedMonth + 1}</span>
             </div>
-            <div style={dayRail}>
+            <div className="ig-day-rail" style={dayRail}>
               {chart.map((r) => {
                 const isToday = sameDay(new Date(r.date), new Date());
                 return (
-                  <article key={r.dayInCycle} style={{ ...dayCard, outline: isToday ? '2px solid #0d4f6e' : '1px solid #efefef' }}>
+                  <article key={r.dayInCycle} className="ig-day-card" style={{ ...dayCard, outline: isToday ? '2px solid #0d4f6e' : '1px solid #efefef' }}>
                     <div style={{ fontSize: '0.72rem', color: '#737373' }}>{fmtDate(r.date)}</div>
                     <div style={{ fontWeight: 700, marginTop: 6 }}>Day {r.dayInCycle}</div>
                     <div style={{ marginTop: 10, fontSize: '1.15rem', fontWeight: 700, color: '#0d4f6e' }}>{r.morningFeedG.toFixed(0)}g</div>
@@ -254,7 +256,7 @@ export function AppDisplayPage({
             title={`${lastMonth ? lastMonth.expectedAvgWeightG.toFixed(0) : '—'} g by month 6`}
             caption={`Started at ${display?.stock.averageWeightAtStockingG ?? '—'} g. Bars are expected average weight.`}
           >
-            <div style={bars}>
+            <div className="ig-bars" style={bars}>
               {m.map((x) => (
                 <div key={x.month} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                   <div style={{ fontSize: '0.68rem', color: '#525252' }}>{x.expectedAvgWeightG.toFixed(0)}</div>
@@ -327,7 +329,7 @@ export function AppDisplayPage({
             title={`${report.cycleFeedKg.months6.toFixed(0)} kg over 6 months`}
             caption={`${report.cycleFeedBags.months6.toFixed(1)} bags of 15 kg. Month 4 is ${report.cycleFeedKg.months4.toFixed(0)} kg · month 5 is ${report.cycleFeedKg.months5.toFixed(0)} kg.`}
           >
-            <div style={bars}>
+            <div className="ig-bars" style={bars}>
               {m.map((x) => (
                 <div key={x.month} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                   <div style={{ height: 90, width: '100%', display: 'flex', alignItems: 'flex-end' }}>
@@ -621,17 +623,10 @@ const bars: React.CSSProperties = {
 };
 
 const dayRail: React.CSSProperties = {
-  display: 'flex',
-  gap: 10,
-  overflowX: 'auto',
-  padding: '0 16px 12px',
-  scrollSnapType: 'x mandatory',
-  WebkitOverflowScrolling: 'touch',
+  // layout handled by .ig-day-rail in device.css
 };
 
 const dayCard: React.CSSProperties = {
-  flex: '0 0 132px',
-  scrollSnapAlign: 'start',
   background: '#fff',
   borderRadius: 16,
   padding: '12px 12px 14px',

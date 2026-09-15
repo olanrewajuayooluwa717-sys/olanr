@@ -47,12 +47,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
           background: '#0d4f6e',
           color: '#fff',
           padding: '0.65rem 1.25rem',
-          display: 'flex',
-          gap: '0.35rem',
-          alignItems: 'center',
-          flexWrap: 'wrap',
         }}
       >
+        <div className="member-nav-inner">
         <Link href="/" style={{ color: '#fff', fontWeight: 700, textDecoration: 'none', marginRight: '0.75rem', fontSize: '1.05rem' }}>
           Fishmaster
         </Link>
@@ -143,6 +140,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </Link>
           </div>
         )}
+        </div>
       </nav>
       {children}
       <PhoneTabBar pathname={pathname} loggedIn={loggedIn} isAdmin={isAdmin} onLogout={logout} />

@@ -136,7 +136,7 @@ export function ContentTabs({ initial = 'article' }: { initial?: string }) {
           )}
           {ads[0] && <Sponsored post={ads[0]} open={openAdId === ads[0].id} onToggle={() => setOpenAdId(openAdId === ads[0].id ? null : ads[0].id)} />}
           {tab === 'picture' ? (
-            <div style={picGrid}>
+            <div className="ig-pic-grid" style={picGrid}>
               {filtered.map((p) => (
                 <button key={p.id} type="button" onClick={() => (locked ? window.location.assign('/register') : setOpenId(p.id))} style={picBtn}>
                   {p.mediaUrl ? (
@@ -181,11 +181,17 @@ export function ContentTabs({ initial = 'article' }: { initial?: string }) {
 
 function Media({ url }: { url: string }) {
   if (isVideoMedia(url)) {
-    return <video src={mediaSrc(url)} controls playsInline style={{ width: '100%', maxHeight: 220, borderRadius: 8, background: '#000', marginTop: 8 }} />;
+    return (
+      <div className="ig-media-frame">
+        <video src={mediaSrc(url)} controls playsInline style={{ width: '100%', maxHeight: 220, borderRadius: 8, background: '#000', marginTop: 8 }} />
+      </div>
+    );
   }
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={mediaSrc(url)} alt="" style={{ width: '100%', maxHeight: 220, objectFit: 'cover', borderRadius: 8, marginTop: 8 }} />
+    <div className="ig-media-frame">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={mediaSrc(url)} alt="" style={{ width: '100%', maxHeight: 220, objectFit: 'cover', borderRadius: 8, marginTop: 8 }} />
+    </div>
   );
 }
 
@@ -223,11 +229,15 @@ function Reader({
         <span style={{ fontSize: '0.78rem', color: '#737373' }}>{index + 1} of {total}</span>
       </div>
       {kind === 'video' && post.mediaUrl && (
-        <video key={post.id} src={mediaSrc(post.mediaUrl)} controls playsInline style={{ width: '100%', maxHeight: 280, borderRadius: 12, background: '#000', marginTop: 12 }} />
+        <div className="ig-media-frame">
+          <video key={post.id} src={mediaSrc(post.mediaUrl)} controls playsInline style={{ width: '100%', maxHeight: 280, borderRadius: 12, background: '#000', marginTop: 12 }} />
+        </div>
       )}
       {(kind === 'picture' || (kind !== 'video' && post.mediaUrl)) && post.mediaUrl && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={mediaSrc(post.mediaUrl)} alt="" style={{ width: '100%', maxHeight: 280, objectFit: 'cover', borderRadius: 12, marginTop: 12 }} />
+        <div className="ig-media-frame">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={mediaSrc(post.mediaUrl)} alt="" style={{ width: '100%', maxHeight: 280, objectFit: 'cover', borderRadius: 12, marginTop: 12 }} />
+        </div>
       )}
       <h2 style={{ margin: '12px 0 4px', fontSize: '1.15rem', letterSpacing: '-0.02em' }}>{post.title}</h2>
       <p style={{ margin: 0, color: '#737373', fontSize: '0.75rem' }}>
@@ -301,10 +311,7 @@ const navBtn: React.CSSProperties = {
 };
 
 const picGrid: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '1fr 1fr 1fr',
-  gap: 2,
-  marginTop: 8,
+  // layout handled by .ig-pic-grid in device.css
 };
 
 const picBtn: React.CSSProperties = {

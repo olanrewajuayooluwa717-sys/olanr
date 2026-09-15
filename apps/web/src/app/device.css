@@ -196,11 +196,147 @@ textarea {
   max-width: 480px;
   margin-left: auto;
   margin-right: auto;
+  box-sizing: border-box;
+}
+
+.member-nav-inner {
+  width: 100%;
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.ig-day-rail {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 0 16px 12px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ig-day-card {
+  flex: 0 0 132px;
+  scroll-snap-align: start;
+}
+
+.ig-pic-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  margin-top: 8px;
+}
+
+.ig-media-frame video,
+.ig-media-frame img {
+  max-height: 280px;
 }
 
 @media (min-width: 768px) {
   .phone-frame {
-    max-width: 720px;
+    max-width: 680px;
+  }
+
+  .member-nav {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+
+  .member-nav-inner {
+    max-width: 680px;
+    margin: 0 auto;
+  }
+
+  .ig-pic-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 3px;
+  }
+}
+
+@media (min-width: 1100px) {
+  .member-main {
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(56, 189, 248, 0.14), transparent 55%),
+      #f0f7fa;
+  }
+
+  .member-nav {
+    position: sticky;
+    top: 0;
+    z-index: 25;
+    backdrop-filter: saturate(1.1);
+  }
+
+  .member-nav-inner {
+    max-width: 980px;
+  }
+
+  .phone-frame {
+    max-width: 980px;
+    margin-top: 1.25rem;
+    margin-bottom: 2rem;
+    border: 1px solid #e8eef2;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 10px 40px rgba(13, 79, 110, 0.08);
+    background: #fff;
+  }
+
+  .ig-profile {
+    padding: 1.35rem 1.75rem 1.1rem !important;
+  }
+
+  .ig-profile-stats {
+    justify-content: flex-start;
+    gap: 2.5rem !important;
+    max-width: 520px;
+  }
+
+  .ig-hero {
+    min-height: 280px !important;
+    padding: 2.25rem 2rem !important;
+  }
+
+  .ig-hero-value {
+    font-size: 3rem !important;
+  }
+
+  .ig-day-rail {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+    overflow: visible;
+    scroll-snap-type: none;
+    padding: 0 1.75rem 1.25rem;
+    gap: 12px;
+  }
+
+  .ig-day-card {
+    flex: unset;
+    width: auto;
+    min-width: 0;
+  }
+
+  .ig-bars {
+    padding-left: 1.75rem !important;
+    padding-right: 1.75rem !important;
+    gap: 14px !important;
+    min-height: 180px;
+  }
+
+  .ig-pic-grid {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+  }
+
+  .ig-media-frame video,
+  .ig-media-frame img {
+    max-height: 420px;
+  }
+
+  .ig-content-pad {
+    padding-left: 1.5rem !important;
+    padding-right: 1.5rem !important;
   }
 }
 
