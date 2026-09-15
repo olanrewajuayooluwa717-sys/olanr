@@ -5,7 +5,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { generateStockCycleReport, detectFeedAlert, dayInCultureCycle } from '@fishmaster/calc-engine';
 import type { StockCycleInput } from '@fishmaster/shared-types';
-import { config, validateConfig } from './config';
+import { config, validateConfig, isAllowedCorsOrigin } from './config';
 import { cyclesRouter } from './cycles';
 import { authRouter } from './auth';
 import { adminRouter } from './admin';
@@ -39,11 +39,7 @@ app.use(
   cors({
     origin: config.isProduction
       ? (origin, callback) => {
-          if (!origin || config.corsOrigins.includes(origin)) {
-            callback(null, true);
-            return;
-          }
-          callback(null, false);
+          callback(null, isAllowedCorsOrigin(origin));
         }
       : true,
     credentials: true,
