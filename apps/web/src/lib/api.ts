@@ -59,25 +59,31 @@ export function getName(): string | null {
 }
 
 /** Render free tier sleeps — first hits often fail with TypeNetworkError / 503. */
-async function fetchWithWakeRetry(url: string, init?: RequestInit, attempts = 4): Promise<Response> {
+async function fetchWithWakeRetry(url: string, init?: RequestInit, attempts = 8): Promise<Response> {
+  let lastRes: Response | undefined;
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
     try {
       const res = await fetch(url, init);
-      // Cold start / spinning up (direct Render or Vercel→Render proxy)
-      if ((res.status === 503 || res.status === 502 || res.status === 504) && i < attempts - 1) {
-        await new Promise((r) => setTimeout(r, 2500 * (i + 1)));
+      lastRes = res;
+      const gatewayDown = res.status === 502 || res.status === 503 || res.status === 504;
+      if (gatewayDown && i < attempts - 1) {
+        // App-level 503s include JSON `{ error: ... }` — don't retry those.
+        const peek = await res.clone().text();
+        if (peek.trim().startsWith('{')) return res;
+        await new Promise((r) => setTimeout(r, 3000 * (i + 1)));
         continue;
       }
       return res;
     } catch (err) {
       lastErr = err;
       if (i < attempts - 1) {
-        await new Promise((r) => setTimeout(r, 2500 * (i + 1)));
+        await new Promise((r) => setTimeout(r, 3000 * (i + 1)));
         continue;
       }
     }
   }
+  if (lastRes) return lastRes;
   throw lastErr instanceof Error ? lastErr : new Error('Network error — API may be waking up. Try again in a minute.');
 }
 
@@ -98,6 +104,12 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
   if (!res.ok) {
     if (res.status === 413 || raw.includes('PayloadTooLarge') || raw.includes('<!DOCTYPE')) {
       throw new Error('That file is too large to paste. Use the file picker on the Videos tab (max 80 MB).');
+    }
+    if (res.status === 502 || res.status === 503 || res.status === 504) {
+      throw new Error(
+        data.error ||
+          'The API is waking up (Render free tier). Wait about a minute and try again.',
+      );
     }
     throw new Error(data.error ?? `Request failed (${res.status})`);
   }
