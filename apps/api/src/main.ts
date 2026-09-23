@@ -131,7 +131,18 @@ app.use((err: unknown, _req: express.Request, res: express.Response, next: expre
     });
     return;
   }
-  next(err);
+  console.error('[api] unhandled error', err);
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+  const message = err instanceof Error ? err.message : 'Internal server error';
+  res.status(500).json({ error: message });
+});
+
+// Express 4 does not catch rejected promises from async route handlers.
+process.on('unhandledRejection', (reason) => {
+  console.error('[api] unhandledRejection', reason);
 });
 
 app.listen(config.port, '0.0.0.0', () => {

@@ -45,83 +45,107 @@ billingRouter.get('/status', requireAuth, async (req, res) => {
 
 /** POST /api/billing/checkout */
 billingRouter.post('/checkout', requireAuth, async (req, res) => {
-  const stripe = getStripe();
-  if (!stripe) {
-    res.status(503).json({
-      error: 'Payments are not configured yet. Add STRIPE_SECRET_KEY on the API host (Render).',
-    });
-    return;
-  }
-
-  const tier = req.body.tier as SubscriptionTier;
-  const plan = PLANS[tier];
-  if (!plan) {
-    res.status(400).json({ error: 'Invalid tier' });
-    return;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: req.user!.userId },
-    include: { farms: { take: 1, select: { country: true } } },
-  });
-  if (!user) {
-    res.status(404).json({ error: 'User not found' });
-    return;
-  }
-
-  const country =
-    countryToIso(user.farms[0]?.country) ||
-    countryToIso(user.country) ||
-    undefined;
-
-  let customerId = user.stripeCustomerId;
-  if (!customerId) {
-    const customer = await stripe.customers.create({
-      email: user.email,
-      name: user.name,
-      metadata: { userId: user.id },
-      ...(country ? { address: { country } } : {}),
-    });
-    customerId = customer.id;
-    await prisma.user.update({ where: { id: user.id }, data: { stripeCustomerId: customerId } });
-  } else if (country) {
-    try {
-      await stripe.customers.update(customerId, { address: { country } });
-    } catch {
-      /* non-fatal — checkout still works */
+  try {
+    const stripe = getStripe();
+    if (!stripe) {
+      res.status(503).json({
+        error: 'Payments are not configured yet. Add STRIPE_SECRET_KEY on the API host (Render).',
+      });
+      return;
     }
-  }
 
-  // Adaptive Pricing localizes the presentment currency (e.g. NGN) while the
-  // Price stays GBP for settlement. Requires Adaptive Pricing enabled in Stripe.
-  const session = await stripe.checkout.sessions.create({
-    mode: 'subscription',
-    customer: customerId,
-    locale: 'auto',
-    billing_address_collection: 'auto',
-    customer_update: { address: 'auto', name: 'auto' },
-    line_items: [{
-      price_data: {
-        currency: 'gbp',
-        unit_amount: plan.amountPence,
-        recurring: { interval: 'month' },
-        product_data: {
-          name: `Fishmaster ${plan.label}`,
-          description: 'Monthly aquaculture subscription · local currency at checkout when available',
+    const tier = req.body.tier as SubscriptionTier;
+    const plan = PLANS[tier];
+    if (!plan) {
+      res.status(400).json({ error: 'Invalid tier' });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.userId },
+      include: { farms: { take: 1, select: { country: true } } },
+    });
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const country =
+      countryToIso(user.farms[0]?.country) ||
+      countryToIso(user.country) ||
+      undefined;
+
+    let customerId = user.stripeCustomerId;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.email,
+        name: user.name,
+        metadata: { userId: user.id },
+        ...(country ? { address: { country } } : {}),
+      });
+      customerId = customer.id;
+      await prisma.user.update({ where: { id: user.id }, data: { stripeCustomerId: customerId } });
+    } else if (country) {
+      try {
+        await stripe.customers.update(customerId, { address: { country } });
+      } catch {
+        /* non-fatal — checkout still works */
+      }
+    }
+
+    const baseSession = {
+      mode: 'subscription' as const,
+      customer: customerId,
+      locale: 'auto' as const,
+      billing_address_collection: 'auto' as const,
+      customer_update: { address: 'auto' as const, name: 'auto' as const },
+      line_items: [{
+        price_data: {
+          currency: 'gbp',
+          unit_amount: plan.amountPence,
+          recurring: { interval: 'month' as const },
+          product_data: {
+            name: `Fishmaster ${plan.label}`,
+            description: 'Monthly aquaculture subscription · local currency at checkout when available',
+          },
         },
-      },
-      quantity: 1,
-    }],
-    adaptive_pricing: { enabled: true },
-    success_url: `${WEB_URL}/subscribe/success?tier=${tier}`,
-    cancel_url: `${WEB_URL}/subscribe?cancelled=1`,
-    metadata: { userId: user.id, tier },
-    subscription_data: {
+        quantity: 1,
+      }],
+      success_url: `${WEB_URL}/subscribe/success?tier=${tier}`,
+      cancel_url: `${WEB_URL}/subscribe?cancelled=1`,
       metadata: { userId: user.id, tier },
-    },
-  } as Parameters<typeof stripe.checkout.sessions.create>[0]);
+      subscription_data: {
+        metadata: { userId: user.id, tier },
+      },
+    };
 
-  res.json({ url: session.url });
+    // Adaptive Pricing localizes presentment (e.g. NGN) while Price stays GBP.
+    // If Stripe rejects it (not enabled on the account), fall back to GBP-only Checkout.
+    let session;
+    try {
+      session = await stripe.checkout.sessions.create({
+        ...baseSession,
+        adaptive_pricing: { enabled: true },
+      } as Parameters<typeof stripe.checkout.sessions.create>[0]);
+    } catch (adaptiveErr) {
+      console.warn('[billing] Adaptive Pricing checkout failed — retrying without it', adaptiveErr);
+      session = await stripe.checkout.sessions.create(baseSession);
+    }
+
+    if (!session.url) {
+      res.status(502).json({ error: 'Stripe did not return a checkout URL' });
+      return;
+    }
+    res.json({ url: session.url });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[billing] checkout failed', err);
+    res.status(502).json({
+      error: message.startsWith('Invalid API Key') || message.includes('Invalid API Key')
+        ? 'Stripe secret key on Render looks invalid. Check STRIPE_SECRET_KEY (test mode).'
+        : `Checkout failed: ${message}`,
+    });
+  }
 });
 
 /** Stripe webhook — mounted with raw body in main.ts */
