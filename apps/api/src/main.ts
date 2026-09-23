@@ -54,8 +54,16 @@ const loginLimiter = rateLimit({
   message: { error: 'Too many login attempts — try again later' },
 });
 
-// Stripe webhook needs raw body — must be before express.json()
-app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), handleStripeWebhook);
+// Stripe webhook needs an unmodified raw body for signature checks.
+// Must be registered before express.json(). Stripe must call Render directly
+// (https://fishmaster-api.onrender.com/...), not the Vercel site proxy.
+app.post(
+  '/api/billing/webhook',
+  express.raw({ type: 'application/json' }),
+  (req, res, next) => {
+    Promise.resolve(handleStripeWebhook(req, res)).catch(next);
+  },
+);
 
 app.use(express.json({ limit: '2mb' }));
 

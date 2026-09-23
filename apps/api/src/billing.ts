@@ -122,7 +122,7 @@ billingRouter.post('/checkout', requireAuth, async (req, res) => {
         },
         quantity: 1,
       }],
-      success_url: `${WEB_URL}/subscribe/success?tier=${tier}`,
+      success_url: `${WEB_URL}/subscribe/success?session_id={CHECKOUT_SESSION_ID}&tier=${tier}`,
       cancel_url: `${WEB_URL}/subscribe?cancelled=1`,
       metadata: { userId: user.id, tier },
       subscription_data: {
@@ -159,6 +159,66 @@ billingRouter.post('/checkout', requireAuth, async (req, res) => {
   }
 });
 
+/** POST /api/billing/confirm — activate from Checkout session id (webhook backup). */
+billingRouter.post('/confirm', requireAuth, async (req, res) => {
+  try {
+    const stripe = getStripe();
+    if (!stripe) {
+      res.status(503).json({ error: 'Payments are not configured yet.' });
+      return;
+    }
+    const sessionId = String(req.body.sessionId ?? '').trim();
+    if (!sessionId.startsWith('cs_')) {
+      res.status(400).json({ error: 'Missing checkout session id' });
+      return;
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    if (session.payment_status !== 'paid' && session.status !== 'complete') {
+      res.status(400).json({ error: 'Checkout is not complete yet' });
+      return;
+    }
+
+    const userId = session.metadata?.userId;
+    const tier = session.metadata?.tier as SubscriptionTier | undefined;
+    if (!userId || userId !== req.user!.userId) {
+      res.status(403).json({ error: 'This checkout belongs to a different account' });
+      return;
+    }
+    if (!tier || !PLANS[tier]) {
+      res.status(400).json({ error: 'Checkout is missing plan metadata' });
+      return;
+    }
+
+    const subId =
+      typeof session.subscription === 'string'
+        ? session.subscription
+        : session.subscription && typeof session.subscription === 'object'
+          ? (session.subscription as { id?: string }).id
+          : undefined;
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        subscriptionTier: tier,
+        subscriptionStatus: 'active',
+        ...(subId ? { stripeSubscriptionId: subId } : {}),
+        ...(typeof session.customer === 'string' ? { stripeCustomerId: session.customer } : {}),
+      },
+    });
+
+    res.json({
+      ok: true,
+      tier: user.subscriptionTier,
+      status: user.subscriptionStatus,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[billing] confirm failed', err);
+    res.status(502).json({ error: `Could not confirm payment: ${message}` });
+  }
+});
+
 /** Stripe webhook — mounted with raw body in main.ts */
 export async function handleStripeWebhook(req: Request, res: Response): Promise<void> {
   const stripe = getStripe();
@@ -174,18 +234,48 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
     return;
   }
 
-  let event;
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, secret);
-  } catch (err) {
-    res.status(400).json({ error: `Webhook error: ${err}` });
+  const rawBody = Buffer.isBuffer(req.body)
+    ? req.body
+    : typeof req.body === 'string'
+      ? Buffer.from(req.body)
+      : null;
+  if (!rawBody) {
+    console.error('[billing] webhook body is not raw — signature check will fail');
+    res.status(400).json({
+      error: 'Webhook body was parsed as JSON. Endpoint must use the raw body (hit Render URL, not Vercel).',
+    });
     return;
   }
 
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object as {
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(rawBody, sig, secret);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[billing] webhook signature failed', message);
+    res.status(400).json({
+      error: `Webhook signature mismatch. Re-copy Signing secret from Stripe → Webhooks into Render STRIPE_WEBHOOK_SECRET. (${message})`,
+    });
+    return;
+  }
+
+  try {
+    await applyStripeEvent(event.type, event.data.object);
+  } catch (err) {
+    console.error('[billing] webhook handler failed', err);
+    res.status(500).json({ error: 'Webhook processing failed' });
+    return;
+  }
+
+  res.json({ received: true });
+}
+
+async function applyStripeEvent(type: string, object: unknown): Promise<void> {
+  if (type === 'checkout.session.completed') {
+    const session = object as {
       metadata?: { userId?: string; tier?: string };
       subscription?: string | { id?: string } | null;
+      customer?: string | { id?: string } | null;
     };
     const userId = session.metadata?.userId;
     const tier = session.metadata?.tier as SubscriptionTier | undefined;
@@ -193,6 +283,10 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
       typeof session.subscription === 'string'
         ? session.subscription
         : session.subscription?.id;
+    const customerId =
+      typeof session.customer === 'string'
+        ? session.customer
+        : session.customer?.id;
     if (userId && tier) {
       await prisma.user.update({
         where: { id: userId },
@@ -200,13 +294,15 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
           subscriptionTier: tier,
           subscriptionStatus: 'active',
           ...(subId ? { stripeSubscriptionId: subId } : {}),
+          ...(customerId ? { stripeCustomerId: customerId } : {}),
         },
       });
     }
+    return;
   }
 
-  if (event.type === 'customer.subscription.updated') {
-    const sub = event.data.object as {
+  if (type === 'customer.subscription.updated') {
+    const sub = object as {
       id: string;
       status: string;
       metadata?: { userId?: string; tier?: string };
@@ -220,7 +316,7 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
             ? 'cancelled'
             : undefined;
     if (status) {
-      await prisma.user.updateMany({
+      const updated = await prisma.user.updateMany({
         where: { stripeSubscriptionId: sub.id },
         data: {
           subscriptionStatus: status,
@@ -229,19 +325,34 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
             : {}),
         },
       });
+      // First subscription.updated can arrive before checkout.session.completed wrote sub id.
+      if (updated.count === 0 && sub.metadata?.userId) {
+        await prisma.user.update({
+          where: { id: sub.metadata.userId },
+          data: {
+            stripeSubscriptionId: sub.id,
+            subscriptionStatus: status,
+            ...(sub.metadata.tier
+              ? { subscriptionTier: sub.metadata.tier as SubscriptionTier }
+              : {}),
+          },
+        });
+      }
     }
+    return;
   }
 
-  if (event.type === 'customer.subscription.deleted') {
-    const sub = event.data.object as { id: string };
+  if (type === 'customer.subscription.deleted') {
+    const sub = object as { id: string };
     await prisma.user.updateMany({
       where: { stripeSubscriptionId: sub.id },
       data: { subscriptionStatus: 'cancelled' },
     });
+    return;
   }
 
-  if (event.type === 'invoice.payment_failed') {
-    const invoice = event.data.object as { subscription?: string | { id?: string } | null };
+  if (type === 'invoice.payment_failed') {
+    const invoice = object as { subscription?: string | { id?: string } | null };
     const subId =
       typeof invoice.subscription === 'string'
         ? invoice.subscription
@@ -253,6 +364,4 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
       });
     }
   }
-
-  res.json({ received: true });
 }

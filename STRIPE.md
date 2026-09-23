@@ -29,13 +29,15 @@ Save so the API redeploys.
 ## 4. Webhook (production API)
 
 1. Stripe → **Developers** → **Webhooks** → **Add endpoint**.
-2. URL: `https://fishmaster-api.onrender.com/api/billing/webhook`
+2. URL must be the **Render API** (not Vercel):
+   `https://fishmaster-api.onrender.com/api/billing/webhook`
 3. Events:
    - `checkout.session.completed`
    - `customer.subscription.updated`
    - `customer.subscription.deleted`
    - `invoice.payment_failed`
-4. Copy **Signing secret** → Render `STRIPE_WEBHOOK_SECRET`.
+4. Copy **Signing secret** (`whsec_...`) → Render `STRIPE_WEBHOOK_SECRET` (exact value; no quotes/spaces).
+5. If deliveries show **400**, the signing secret does not match — re-copy from this endpoint and save on Render, then **Resend** the failed events.
 
 ## 5. Smoke test
 
