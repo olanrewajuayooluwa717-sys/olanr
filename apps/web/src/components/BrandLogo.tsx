@@ -21,7 +21,7 @@ export function BrandLogo({ href = '/', variant = 'full', className, onDark = fa
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={src}
-      alt="Fishmaster Limited — An African catfish company"
+      alt="Fishmaster Limited"
       height={height}
       style={{
         height,

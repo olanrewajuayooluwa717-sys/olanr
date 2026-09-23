@@ -3,7 +3,7 @@ import './device.css';
 
 export const metadata = {
   title: 'Fishmaster',
-  description: 'Fishmaster Limited — An African catfish company',
+  description: 'Fishmaster Limited — aquaculture management for catfish farmers',
   icons: {
     icon: '/brand/logo-compact.png',
     apple: '/brand/logo-compact.png',
