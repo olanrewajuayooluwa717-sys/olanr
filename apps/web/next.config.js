@@ -3,13 +3,15 @@ const nextConfig = {
   transpilePackages: ['@fishmaster/shared-types'],
   // Quick tunnels (trycloudflare.com) and phone-on-same-Wi-Fi can open the dev app.
   allowedDevOrigins: ['*.trycloudflare.com'],
-  // Phone/tablet browsers must not call localhost. /api and /uploads are proxied
-  // to the local API so sign-in stays on the same address.
+  // Browser always calls same-origin /api and /uploads. Next rewrites those
+  // to the API host (local in dev, Render on Vercel) so we avoid cross-origin
+  // TypeNetworkError when Render free tier is cold-starting.
   async rewrites() {
-    // Vercel sets NEXT_PUBLIC_API_URL to the Render API. Do not proxy /api
-    // to this machine — there is no API process on the Vercel host.
-    if (process.env.NEXT_PUBLIC_API_URL) return [];
-    const api = process.env.API_INTERNAL_URL || 'http://127.0.0.1:3001';
+    const api = (
+      process.env.API_INTERNAL_URL ||
+      process.env.NEXT_PUBLIC_API_URL ||
+      'http://127.0.0.1:3001'
+    ).replace(/\/+$/, '');
     return [
       { source: '/api/:path*', destination: `${api}/api/:path*` },
       { source: '/uploads/:path*', destination: `${api}/uploads/:path*` },

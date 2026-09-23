@@ -94,7 +94,7 @@ Vercel → Project → **Settings** → **Environment Variables** (Production):
 
 | Key | Value |
 |-----|--------|
-| `NEXT_PUBLIC_API_URL` | `https://fishmaster-api.onrender.com` |
+| `NEXT_PUBLIC_API_URL` | `https://fishmaster-api.onrender.com` (used by Next **rewrites** so the browser talks same-origin `/api`, not cross-origin to Render) |
 
 See `apps/web/.env.production.example`.
 

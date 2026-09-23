@@ -1,5 +1,9 @@
-/** Same-origin by default so phones do not call localhost. Next rewrites /api to the local server. */
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
+/**
+ * Same-origin only. Next rewrites /api and /uploads to the API host
+ * (local or Render). Do not point the browser at onrender.com — cold starts
+ * there surface as TypeNetworkError in Firefox/Safari.
+ */
+export const API_URL = '';
 
 export function isVideoMedia(url: string | null | undefined): boolean {
   if (!url) return false;
@@ -60,8 +64,8 @@ async function fetchWithWakeRetry(url: string, init?: RequestInit, attempts = 4)
   for (let i = 0; i < attempts; i++) {
     try {
       const res = await fetch(url, init);
-      // Cold start / spinning up
-      if (res.status === 503 && i < attempts - 1) {
+      // Cold start / spinning up (direct Render or Vercel→Render proxy)
+      if ((res.status === 503 || res.status === 502 || res.status === 504) && i < attempts - 1) {
         await new Promise((r) => setTimeout(r, 2500 * (i + 1)));
         continue;
       }
