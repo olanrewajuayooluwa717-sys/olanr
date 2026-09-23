@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { API_URL, authHeaders, getToken, isVideoMedia, mediaSrc } from '../lib/api';
+import { API_URL, authHeaders, clearAuth, getToken, isVideoMedia, mediaSrc } from '../lib/api';
 
 export const CONTENT_TABS = [
   { id: 'article', label: 'Articles' },
@@ -41,15 +41,46 @@ export function ContentTabs({ initial = 'article' }: { initial?: string }) {
     setPosts([]);
     setOpenId(null);
     setQuery('');
+    setError(null);
     const signedIn = !!getToken();
     setLocked(!signedIn);
     const url = signedIn
       ? `${API_URL}/api/content?type=${tab}`
       : `${API_URL}/api/content/preview?type=${tab}`;
-    fetch(url, signedIn ? { headers: authHeaders() } : undefined)
-      .then((r) => r.json())
-      .then((data) => setPosts(Array.isArray(data) ? data : []))
-      .catch((e) => setError(String(e)));
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(url, signedIn ? { headers: authHeaders() } : undefined);
+        const data = await res.json().catch(() => null);
+        if (cancelled) return;
+        if (res.status === 401) {
+          clearAuth();
+          setLocked(true);
+          setPosts([]);
+          setError('Session expired — sign in again to open articles.');
+          return;
+        }
+        if (!res.ok) {
+          setPosts([]);
+          setError(typeof data?.error === 'string' ? data.error : `Could not load content (${res.status})`);
+          return;
+        }
+        if (!Array.isArray(data)) {
+          setPosts([]);
+          setError('Could not load content.');
+          return;
+        }
+        setPosts(data);
+      } catch (e) {
+        if (!cancelled) {
+          setPosts([]);
+          setError(String(e));
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [tab]);
 
   useEffect(() => {
@@ -72,6 +103,8 @@ export function ContentTabs({ initial = 'article' }: { initial?: string }) {
     setTab(id);
     setOpenId(null);
   };
+
+  const sessionExpired = !!error && error.startsWith('Session expired');
 
   return (
     <section>
@@ -104,7 +137,16 @@ export function ContentTabs({ initial = 'article' }: { initial?: string }) {
         })}
       </div>
 
-      {error && <p style={{ color: '#b91c1c', fontSize: '0.85rem', padding: '8px 0' }}>{error}</p>}
+      {error && (
+        <p style={{ color: '#b91c1c', fontSize: '0.85rem', padding: '8px 0' }}>
+          {error}{' '}
+          {sessionExpired && (
+            <a href="/login" style={{ color: '#0d4f6e', fontWeight: 700 }}>
+              Sign in →
+            </a>
+          )}
+        </p>
+      )}
 
       {open ? (
         <Reader

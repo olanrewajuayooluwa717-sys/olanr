@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, View, Text, Image, Pressable, TextInput, StyleSheet } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { API_URL, authHeaders, getToken, isVideoMedia, mediaSrc } from '../../src/api';
+import { API_URL, authHeaders, clearAuth, getToken, isVideoMedia, mediaSrc } from '../../src/api';
 import { colors } from '../../src/theme';
 
 const TABS = [
@@ -28,6 +28,8 @@ export default function ContentFeedScreen() {
   const [query, setQuery] = useState('');
   const [ads, setAds] = useState<Post[]>([]);
   const [openAdId, setOpenAdId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   useEffect(() => {
     fetch(`${API_URL}/api/content/ads?place=${tab}`)
@@ -39,16 +41,42 @@ export default function ContentFeedScreen() {
   useEffect(() => {
     setOpenId(null);
     setQuery('');
+    setError(null);
+    setSessionExpired(false);
     let cancelled = false;
     (async () => {
-    const signedIn = !!(await getToken());
-    const url = signedIn
-      ? `${API_URL}/api/content?type=${tab}`
-      : `${API_URL}/api/content/preview?type=${tab}`;
-    fetch(url, signedIn ? { headers: await authHeaders() } : undefined)
-      .then((r) => r.json())
-      .then((data) => { if (!cancelled) setPosts(Array.isArray(data) ? data : []); })
-      .catch(() => { if (!cancelled) setPosts([]); });
+      const signedIn = !!(await getToken());
+      const url = signedIn
+        ? `${API_URL}/api/content?type=${tab}`
+        : `${API_URL}/api/content/preview?type=${tab}`;
+      try {
+        const res = await fetch(url, signedIn ? { headers: await authHeaders() } : undefined);
+        const data = await res.json().catch(() => null);
+        if (cancelled) return;
+        if (res.status === 401) {
+          await clearAuth();
+          setPosts([]);
+          setSessionExpired(true);
+          setError('Session expired — sign in again to open articles.');
+          return;
+        }
+        if (!res.ok) {
+          setPosts([]);
+          setError(typeof data?.error === 'string' ? data.error : `Could not load content (${res.status})`);
+          return;
+        }
+        if (!Array.isArray(data)) {
+          setPosts([]);
+          setError('Could not load content.');
+          return;
+        }
+        setPosts(data);
+      } catch {
+        if (!cancelled) {
+          setPosts([]);
+          setError('Could not load content.');
+        }
+      }
     })();
     return () => { cancelled = true; };
   }, [tab]);
@@ -74,6 +102,17 @@ export default function ContentFeedScreen() {
           );
         })}
       </View>
+
+      {error && (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>{error}</Text>
+          {sessionExpired && (
+            <Pressable onPress={() => router.push('/login')}>
+              <Text style={styles.signIn}>Sign in →</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
 
       {open ? (
         <View>
@@ -110,7 +149,7 @@ export default function ContentFeedScreen() {
               placeholderTextColor={colors.muted}
             />
           )}
-          {filtered.length === 0 && <Text style={styles.empty}>Nothing in this tab yet.</Text>}
+          {!error && filtered.length === 0 && <Text style={styles.empty}>Nothing in this tab yet.</Text>}
           {ads[0] && (
             <Pressable onPress={() => setOpenAdId(openAdId === ads[0].id ? null : ads[0].id)} style={styles.sponsor}>
               <Text style={styles.sponsorTag}>Sponsored</Text>
@@ -149,6 +188,9 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 13, color: colors.muted, fontWeight: '500' },
   tabTextOn: { color: colors.text, fontWeight: '700' },
   empty: { color: colors.muted },
+  errorBox: { marginBottom: 10, padding: 10, borderRadius: 10, backgroundColor: '#fef2f2' },
+  errorText: { color: '#b91c1c', fontSize: 13, fontWeight: '600' },
+  signIn: { color: colors.primary, fontWeight: '700', marginTop: 6 },
   search: { backgroundColor: colors.card, borderRadius: 10, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: '#e5e5e5' },
   row: { flexDirection: 'row', gap: 10, alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   index: { width: 28, textAlign: 'center', fontWeight: '700', color: colors.primary },

@@ -64,7 +64,7 @@ Render → **fishmaster-api** → **Environment**:
 | Key | Required | Value |
 |-----|----------|-------|
 | `NODE_ENV` | Yes | `production` (set in yaml) |
-| `JWT_SECRET` | Yes | Auto-generated — keep it |
+| `JWT_SECRET` | Yes | Auto-generated — keep it. **Do not regenerate** after users are live; old sessions will look logged in but fail to load articles until they sign in again. |
 | `DATABASE_URL` | Yes | Auto (Render) or Neon URL |
 | `WEB_URL` | Yes | Set after Vercel deploy (Part 3) |
 | `CORS_ORIGINS` | Optional | Comma-separated Vercel preview URLs |

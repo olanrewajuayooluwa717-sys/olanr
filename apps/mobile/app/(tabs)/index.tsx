@@ -5,7 +5,7 @@ import { useFocusEffect } from 'expo-router';
 import type { StockCycleReport } from '@fishmaster/shared-types';
 import { TIER_LABELS } from '@fishmaster/shared-types';
 import {
-  API_URL, fetchCycleReport, fetchDashboard, fetchEconomics, getCycleId, getRole, setCycleId, authHeaders, fetchUserCycles, isVideoMedia, mediaSrc,
+  API_URL, clearAuth, fetchCycleReport, fetchDashboard, fetchEconomics, getCycleId, getRole, setCycleId, authHeaders, fetchUserCycles, isVideoMedia, mediaSrc,
   type EconomicsSummary,
 } from '../../src/api';
 import { HomeIconGrid } from '../../src/HomeIconGrid';
@@ -46,11 +46,22 @@ export default function DashboardScreen() {
       setEcon(economics);
       setError(null);
       const [content, status, cycles] = await Promise.all([
-        fetch(`${API_URL}/api/content`, { headers: await authHeaders() }).then((r) => r.json()).catch(() => []),
+        fetch(`${API_URL}/api/content`, { headers: await authHeaders() })
+          .then(async (r) => {
+            const data = await r.json().catch(() => null);
+            if (r.status === 401) {
+              await clearAuth();
+              setError('Session expired — sign in again to open articles.');
+              return [];
+            }
+            if (!r.ok || !Array.isArray(data)) return [];
+            return data as NewsPost[];
+          })
+          .catch(() => [] as NewsPost[]),
         fetch(`${API_URL}/api/billing/status`, { headers: await authHeaders() }).then((r) => r.json()).catch(() => null),
         fetchUserCycles(),
       ]);
-      setNews(content);
+      setNews(Array.isArray(content) ? content : []);
       setPonds(cycles.map((c) => ({
         id: c.id,
         label: `${c.pond.farm.name} · ${c.pond.name} (#${c.pond.number})`,
