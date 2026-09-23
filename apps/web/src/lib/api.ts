@@ -94,9 +94,16 @@ async function fetchWithWakeRetry(url: string, init?: RequestInit, attempts = 6)
 }
 
 export async function apiFetch(path: string, options: RequestInit = {}) {
+  const headers: Record<string, string> = {
+    ...(authHeaders() as Record<string, string>),
+    ...(options.headers as Record<string, string> | undefined),
+  };
+  if (options.body != null && !headers['Content-Type'] && !headers['content-type']) {
+    headers['Content-Type'] = 'application/json';
+  }
   const res = await fetchWithWakeRetry(`${API_URL}${path}`, {
     ...options,
-    headers: { ...authHeaders(), ...options.headers },
+    headers,
   });
   const raw = await res.text();
   let data: any = {};
@@ -166,9 +173,18 @@ export async function fetchCycleReport(cycleId?: string | null) {
     ? `${API_URL}/api/cycles/${cycleId}/report`
     : `${API_URL}/api/cycles/demo/report`;
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`API ${res.status}`);
-  const data = await res.json();
+  const res = await fetchWithWakeRetry(url);
+  const raw = await res.text();
+  if (!res.ok) {
+    if (looksLikeHtml(raw) || res.status === 429) {
+      throw new Error('The API host is rate-limiting right now. Wait a minute, then refresh.');
+    }
+    if (res.status === 502 || res.status === 503 || res.status === 504) {
+      throw new Error('The API is waking up (Render free tier). Wait about a minute and refresh.');
+    }
+    throw new Error(`API ${res.status}`);
+  }
+  const data = JSON.parse(raw);
   if (data.error) throw new Error(data.error);
   if (data.report) {
     return {
@@ -182,36 +198,30 @@ export async function fetchCycleReport(cycleId?: string | null) {
 }
 
 export async function fetchReportFallback() {
-  const res = await fetch(`${API_URL}/api/reports/stock-cycle`, {
+  const res = await fetchWithWakeRetry(`${API_URL}/api/reports/stock-cycle`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(SAMPLE_PAYLOAD),
   });
-  if (!res.ok) throw new Error('API unreachable');
+  if (!res.ok) {
+    throw new Error('The API is offline right now. Wait a minute and refresh.');
+  }
   const report = await res.json();
   return { report, cycleId: null, pondName: 'fishmaster 1 (offline)' };
 }
 
 export async function registerFarm(body: Record<string, unknown>) {
-  const res = await fetch(`${API_URL}/api/cycles`, {
+  return apiFetch('/api/cycles', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error ?? 'Registration failed');
-  return data as { cycleId: string; farmId: string; pondId: string; token: string; userId: string };
+  }) as Promise<{ cycleId: string; farmId: string; pondId: string; token: string; userId: string }>;
 }
 
 export async function login(email: string, password: string) {
-  const res = await fetch(`${API_URL}/api/auth/login`, {
+  return apiFetch('/api/auth/login', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error ?? 'Login failed');
-  return data as { token: string; user: { id: string; name: string; email: string; role: string } };
+  }) as Promise<{ token: string; user: { id: string; name: string; email: string; role: string } }>;
 }
 
 export type CycleSummary = {
@@ -221,10 +231,12 @@ export type CycleSummary = {
 
 export async function fetchUserCycles(): Promise<CycleSummary[]> {
   if (!getToken()) return [];
-  const res = await fetch(`${API_URL}/api/cycles`, { headers: authHeaders() });
-  const data = await res.json();
-  if (!res.ok || !Array.isArray(data)) return [];
-  return data;
+  try {
+    const data = await apiFetch('/api/cycles');
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
 }
 
 export function setCycleId(id: string) {
@@ -232,10 +244,7 @@ export function setCycleId(id: string) {
 }
 
 export async function fetchDashboard(cycleId: string) {
-  const res = await fetch(`${API_URL}/api/cycles/${cycleId}/dashboard`);
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error ?? 'Failed to load dashboard');
-  return data;
+  return apiFetch(`/api/cycles/${cycleId}/dashboard`);
 }
 
 export type EconomicsSummary = {

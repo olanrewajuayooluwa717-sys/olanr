@@ -1,10 +1,7 @@
-# Render free web services sleep after ~15 minutes idle.
-# Gentle ping — avoid Cloudflare rate limits from burst retries.
+# Manual wake only — scheduled pings were tripping Cloudflare rate limits on Render free.
 name: Keep API warm
 
 on:
-  schedule:
-    - cron: '*/14 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -13,19 +10,9 @@ jobs:
     steps:
       - name: Wake Render API
         run: |
-          # Single slow attempt first; only one retry if needed.
           code=$(curl -sS -o /tmp/fm-health.json -w '%{http_code}' --max-time 90 \
             -A 'FishmasterKeepWarm/1.0' \
             https://fishmaster-api.onrender.com/health || echo 000)
-          echo "attempt 1 → HTTP $code"
-          if [ "$code" = "200" ]; then
-            cat /tmp/fm-health.json || true
-            exit 0
-          fi
-          sleep 45
-          code=$(curl -sS -o /tmp/fm-health.json -w '%{http_code}' --max-time 90 \
-            -A 'FishmasterKeepWarm/1.0' \
-            https://fishmaster-api.onrender.com/health || echo 000)
-          echo "attempt 2 → HTTP $code"
+          echo "HTTP $code"
           cat /tmp/fm-health.json || true
           exit 0

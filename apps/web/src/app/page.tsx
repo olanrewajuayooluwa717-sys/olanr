@@ -74,7 +74,13 @@ export default function HomePage() {
           setError('Showing a sample pond — register or sign in for yours.');
         }),
       )
-      .catch((e) => setError(`API unreachable: ${e}`))
+      .catch((e) =>
+        setError(
+          String(e).includes('waking') || String(e).includes('offline') || String(e).includes('rate-limiting')
+            ? String(e).replace(/^Error:\s*/, '')
+            : 'The API is offline right now. Wait a minute and refresh.',
+        ),
+      )
       .finally(() => setLoading(false));
   };
 
