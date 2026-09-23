@@ -70,13 +70,15 @@ app.get('/', (_req, res) => {
   });
 });
 
+// Liveness for Render: always 200 if the process is up. A DB blip must not
+// take the whole service out of rotation (that surfaces as TypeNetworkError).
 app.get('/health', async (_req, res) => {
   try {
     const { prisma } = await import('@fishmaster/db');
     await prisma.$queryRaw`SELECT 1`;
     res.json({ status: 'ok', service: 'fishmaster-api', database: true });
   } catch {
-    res.status(503).json({ status: 'degraded', service: 'fishmaster-api', database: false });
+    res.status(200).json({ status: 'degraded', service: 'fishmaster-api', database: false });
   }
 });
 

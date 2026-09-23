@@ -30,8 +30,7 @@ export default function SubscribePage() {
     if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('cancelled')) {
       setCancelled(true);
     }
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/billing/plans`)
-      .then((r) => r.json())
+    apiFetch('/api/billing/plans')
       .then((data: PlansResponse | Plan[]) => {
         if (Array.isArray(data)) {
           setPlans(data);
@@ -41,7 +40,7 @@ export default function SubscribePage() {
         if (data.presentment) setPresentment(data.presentment);
         if (typeof data.stripeConfigured === 'boolean') setStripeReady(data.stripeConfigured);
       })
-      .catch(() => setError('Could not load plans'));
+      .catch(() => setError('Could not load plans — the API may be waking up. Wait ~30s and refresh.'));
   }, [router]);
 
   const subscribe = async (tier: string) => {

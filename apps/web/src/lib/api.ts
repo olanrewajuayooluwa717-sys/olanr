@@ -54,8 +54,31 @@ export function getName(): string | null {
   return localStorage.getItem('fishmaster_name');
 }
 
+/** Render free tier sleeps — first hits often fail with TypeNetworkError / 503. */
+async function fetchWithWakeRetry(url: string, init?: RequestInit, attempts = 4): Promise<Response> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch(url, init);
+      // Cold start / spinning up
+      if (res.status === 503 && i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, 2500 * (i + 1)));
+        continue;
+      }
+      return res;
+    } catch (err) {
+      lastErr = err;
+      if (i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, 2500 * (i + 1)));
+        continue;
+      }
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error('Network error — API may be waking up. Try again in a minute.');
+}
+
 export async function apiFetch(path: string, options: RequestInit = {}) {
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetchWithWakeRetry(`${API_URL}${path}`, {
     ...options,
     headers: { ...authHeaders(), ...options.headers },
   });
