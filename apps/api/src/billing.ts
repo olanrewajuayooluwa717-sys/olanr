@@ -28,19 +28,132 @@ billingRouter.get('/plans', (_req, res) => {
   });
 });
 
+/** Pull active Stripe subscription into our DB (works even when webhooks 400). */
+async function syncSubscriptionFromStripe(userId: string): Promise<{
+  tier: SubscriptionTier;
+  status: string;
+  synced: boolean;
+}> {
+  const stripe = getStripe();
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new Error('User not found');
+  if (!stripe) {
+    return { tier: user.subscriptionTier, status: user.subscriptionStatus, synced: false };
+  }
+
+  let customerId = user.stripeCustomerId;
+  if (!customerId) {
+    const found = await stripe.customers.list({ email: user.email, limit: 5 });
+    const match =
+      found.data.find((c) => c.metadata?.userId === userId) ??
+      found.data[0];
+    if (match) {
+      customerId = match.id;
+      await prisma.user.update({
+        where: { id: userId },
+        data: { stripeCustomerId: customerId },
+      });
+    }
+  }
+
+  if (!customerId) {
+    return { tier: user.subscriptionTier, status: user.subscriptionStatus, synced: false };
+  }
+
+  const subs = await stripe.subscriptions.list({
+    customer: customerId,
+    status: 'all',
+    limit: 10,
+  });
+  const active =
+    subs.data.find((s) => s.status === 'active' || s.status === 'trialing') ??
+    subs.data.find((s) => s.status === 'past_due');
+
+  if (!active) {
+    return { tier: user.subscriptionTier, status: user.subscriptionStatus, synced: false };
+  }
+
+  const tierFromMeta = active.metadata?.tier as SubscriptionTier | undefined;
+  const tier =
+    (tierFromMeta && PLANS[tierFromMeta] ? tierFromMeta : undefined) ??
+    user.subscriptionTier;
+
+  const status =
+    active.status === 'active' || active.status === 'trialing'
+      ? 'active'
+      : active.status === 'past_due'
+        ? 'suspended'
+        : user.subscriptionStatus;
+
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      subscriptionTier: tier,
+      subscriptionStatus: status,
+      stripeSubscriptionId: active.id,
+      stripeCustomerId: customerId,
+    },
+  });
+
+  return {
+    tier: updated.subscriptionTier,
+    status: updated.subscriptionStatus,
+    synced: true,
+  };
+}
+
 /** GET /api/billing/status */
 billingRouter.get('/status', requireAuth, async (req, res) => {
-  const user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
-  if (!user) {
-    res.status(404).json({ error: 'User not found' });
-    return;
+  try {
+    let user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    // Self-heal when Checkout succeeded but webhooks returned 400.
+    if (user.subscriptionStatus !== 'active' && isStripeConfigured()) {
+      try {
+        const synced = await syncSubscriptionFromStripe(user.id);
+        if (synced.synced) {
+          user = await prisma.user.findUnique({ where: { id: user.id } });
+        }
+      } catch (err) {
+        console.warn('[billing] status sync skipped', err);
+      }
+    }
+
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    res.json({
+      tier: user.subscriptionTier,
+      status: user.subscriptionStatus,
+      plan: PLANS[user.subscriptionTier],
+      stripeConfigured: isStripeConfigured(),
+    });
+  } catch (err) {
+    console.error('[billing] status failed', err);
+    res.status(500).json({ error: 'Could not load billing status' });
   }
-  res.json({
-    tier: user.subscriptionTier,
-    status: user.subscriptionStatus,
-    plan: PLANS[user.subscriptionTier],
-    stripeConfigured: isStripeConfigured(),
-  });
+});
+
+/** POST /api/billing/sync — force refresh membership from Stripe */
+billingRouter.post('/sync', requireAuth, async (req, res) => {
+  try {
+    const result = await syncSubscriptionFromStripe(req.user!.userId);
+    res.json({
+      ok: true,
+      ...result,
+      plan: PLANS[result.tier],
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[billing] sync failed', err);
+    res.status(502).json({ error: `Could not sync subscription: ${message}` });
+  }
 });
 
 /** POST /api/billing/checkout */

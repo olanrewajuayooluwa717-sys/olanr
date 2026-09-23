@@ -12,34 +12,51 @@ export default function SubscribeSuccessPage() {
   useEffect(() => {
     if (!getToken()) {
       setStatus('error');
-      setDetail('Sign in again, then open Plans if your membership is not active yet.');
+      setDetail('Sign in again, then open Plans and tap “Refresh membership”.');
       return;
     }
     const params = new URLSearchParams(window.location.search);
     const sessionId = params.get('session_id');
-    if (!sessionId) {
-      // Older Checkout redirects without session_id — status may still update via webhook.
-      setStatus('active');
-      setDetail('Payment received. If Plans still looks inactive, wait a minute and refresh.');
-      return;
-    }
 
-    apiFetch('/api/billing/confirm', {
-      method: 'POST',
-      body: JSON.stringify({ sessionId }),
-    })
-      .then((data: { status?: string; tier?: string }) => {
+    const activate = async () => {
+      if (sessionId) {
+        try {
+          const data = await apiFetch('/api/billing/confirm', {
+            method: 'POST',
+            body: JSON.stringify({ sessionId }),
+          });
+          setStatus('active');
+          setDetail(
+            data.tier
+              ? `Your ${data.tier} plan is active.`
+              : 'Your payment was successful and your account is now active.',
+          );
+          return;
+        } catch {
+          /* fall through to Stripe sync */
+        }
+      }
+
+      const synced = await apiFetch('/api/billing/sync', { method: 'POST' });
+      if (synced.status === 'active' || synced.synced) {
         setStatus('active');
         setDetail(
-          data.tier
-            ? `Your ${data.tier} plan is active.`
+          synced.tier
+            ? `Your ${synced.tier} plan is active.`
             : 'Your payment was successful and your account is now active.',
         );
-      })
-      .catch((e) => {
-        setStatus('error');
-        setDetail(String(e).replace(/^Error:\s*/, ''));
-      });
+        return;
+      }
+      setStatus('error');
+      setDetail(
+        'Payment received in Stripe, but membership is not active yet. Open Plans and tap Refresh membership.',
+      );
+    };
+
+    activate().catch((e) => {
+      setStatus('error');
+      setDetail(String(e).replace(/^Error:\s*/, ''));
+    });
   }, []);
 
   return (
@@ -51,13 +68,18 @@ export default function SubscribeSuccessPage() {
           <>
             <Flash tone="warn">{detail}</Flash>
             <p style={{ marginTop: '0.75rem', color: '#555' }}>
-              Stripe took the payment. If membership is not active in a minute, tell us — the webhook may need its signing secret refreshed on Render.
+              Stripe webhooks can show 400 if Render’s signing secret is wrong. Refresh membership on Plans still activates you from Stripe.
             </p>
           </>
         )}
-        <Link href="/" style={{ ...btnStyle, display: 'inline-block', textDecoration: 'none', marginTop: '1rem' }}>
-          Go to dashboard
+        <Link href="/subscribe" style={{ ...btnStyle, display: 'inline-block', textDecoration: 'none', marginTop: '1rem' }}>
+          Back to Plans
         </Link>
+        <div style={{ marginTop: '0.75rem' }}>
+          <Link href="/" style={{ color: '#0d4f6e' }}>
+            Go to dashboard
+          </Link>
+        </div>
       </Card>
     </main>
   );

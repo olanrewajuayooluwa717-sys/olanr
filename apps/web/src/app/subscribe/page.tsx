@@ -20,7 +20,33 @@ export default function SubscribePage() {
   const [stripeReady, setStripeReady] = useState(true);
   const [cancelled, setCancelled] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [membership, setMembership] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const refreshMembership = async () => {
+    setSyncing(true);
+    setError(null);
+    try {
+      const data = await apiFetch('/api/billing/sync', { method: 'POST' });
+      if (data.status === 'active') {
+        setMembership(`Active · ${data.plan?.label ?? data.tier}`);
+      } else if (data.synced) {
+        setMembership(`${data.status} · ${data.plan?.label ?? data.tier}`);
+      } else {
+        const status = await apiFetch('/api/billing/status');
+        setMembership(
+          status.status === 'active'
+            ? `Active · ${status.plan?.label ?? status.tier}`
+            : `Status: ${status.status}`,
+        );
+      }
+    } catch (e) {
+      setError(String(e).replace(/^Error:\s*/, ''));
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   useEffect(() => {
     if (!getToken()) {
@@ -41,6 +67,7 @@ export default function SubscribePage() {
         if (typeof data.stripeConfigured === 'boolean') setStripeReady(data.stripeConfigured);
       })
       .catch(() => setError('Could not load plans — the API may be waking up. Wait ~30s and refresh.'));
+    refreshMembership().catch(() => {});
   }, [router]);
 
   const subscribe = async (tier: string) => {
@@ -70,10 +97,22 @@ export default function SubscribePage() {
       {!stripeReady && (
         <Flash tone="warn">Card payments are being connected. You can still browse plans; Subscribe will unlock once Stripe is live on the API.</Flash>
       )}
+      {membership && (
+        <Flash tone="ok">{membership}</Flash>
+      )}
       {presentment && (
         <p style={{ color: '#64748b', fontSize: '0.85rem', margin: '0 0 1rem' }}>{presentment}</p>
       )}
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
+
+      <button
+        type="button"
+        style={{ ...btnStyle, marginBottom: '1rem', opacity: syncing ? 0.6 : 1 }}
+        disabled={syncing}
+        onClick={() => refreshMembership()}
+      >
+        {syncing ? 'Refreshing…' : 'Refresh membership'}
+      </button>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
         {plans.map((plan) => (
