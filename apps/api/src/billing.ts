@@ -76,6 +76,17 @@ billingRouter.post('/checkout', requireAuth, async (req, res) => {
       undefined;
 
     let customerId = user.stripeCustomerId;
+    if (customerId) {
+      try {
+        await stripe.customers.retrieve(customerId);
+      } catch {
+        // Stale id from an old Stripe account / test↔live switch — recreate.
+        console.warn('[billing] clearing stale stripeCustomerId', customerId);
+        customerId = null;
+        await prisma.user.update({ where: { id: user.id }, data: { stripeCustomerId: null } });
+      }
+    }
+
     if (!customerId) {
       const customer = await stripe.customers.create({
         email: user.email,
