@@ -1,10 +1,10 @@
 # Render free web services sleep after ~15 minutes idle.
-# Ping /health often enough to keep fishmaster-api warm for Stripe smoke tests.
+# Gentle ping — avoid Cloudflare rate limits from burst retries.
 name: Keep API warm
 
 on:
   schedule:
-    - cron: '*/12 * * * *'
+    - cron: '*/14 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -13,15 +13,19 @@ jobs:
     steps:
       - name: Wake Render API
         run: |
-          for i in 1 2 3 4 5; do
-            code=$(curl -sS -o /tmp/fm-health.json -w '%{http_code}' --max-time 90 \
-              https://fishmaster-api.onrender.com/health || echo 000)
-            echo "attempt $i → HTTP $code"
-            if [ "$code" = "200" ]; then
-              cat /tmp/fm-health.json || true
-              exit 0
-            fi
-            sleep 15
-          done
-          echo "API still not healthy after retries (non-fatal for schedule)"
+          # Single slow attempt first; only one retry if needed.
+          code=$(curl -sS -o /tmp/fm-health.json -w '%{http_code}' --max-time 90 \
+            -A 'FishmasterKeepWarm/1.0' \
+            https://fishmaster-api.onrender.com/health || echo 000)
+          echo "attempt 1 → HTTP $code"
+          if [ "$code" = "200" ]; then
+            cat /tmp/fm-health.json || true
+            exit 0
+          fi
+          sleep 45
+          code=$(curl -sS -o /tmp/fm-health.json -w '%{http_code}' --max-time 90 \
+            -A 'FishmasterKeepWarm/1.0' \
+            https://fishmaster-api.onrender.com/health || echo 000)
+          echo "attempt 2 → HTTP $code"
+          cat /tmp/fm-health.json || true
           exit 0

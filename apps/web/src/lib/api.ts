@@ -58,8 +58,13 @@ export function getName(): string | null {
   return localStorage.getItem('fishmaster_name');
 }
 
+function looksLikeHtml(raw: string): boolean {
+  const t = raw.trim().slice(0, 200).toLowerCase();
+  return t.startsWith('<!doctype') || t.startsWith('<html') || t.includes('just a moment');
+}
+
 /** Render free tier sleeps — first hits often fail with TypeNetworkError / 503. */
-async function fetchWithWakeRetry(url: string, init?: RequestInit, attempts = 8): Promise<Response> {
+async function fetchWithWakeRetry(url: string, init?: RequestInit, attempts = 6): Promise<Response> {
   let lastRes: Response | undefined;
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
@@ -67,18 +72,19 @@ async function fetchWithWakeRetry(url: string, init?: RequestInit, attempts = 8)
       const res = await fetch(url, init);
       lastRes = res;
       const gatewayDown = res.status === 502 || res.status === 503 || res.status === 504;
-      if (gatewayDown && i < attempts - 1) {
-        // App-level 503s include JSON `{ error: ... }` — don't retry those.
+      // Cloudflare bot/rate pages (often 429/503) need a slower retry, not a burst.
+      const challenged = res.status === 429;
+      if ((gatewayDown || challenged) && i < attempts - 1) {
         const peek = await res.clone().text();
         if (peek.trim().startsWith('{')) return res;
-        await new Promise((r) => setTimeout(r, 3000 * (i + 1)));
+        await new Promise((r) => setTimeout(r, challenged ? 8000 * (i + 1) : 4000 * (i + 1)));
         continue;
       }
       return res;
     } catch (err) {
       lastErr = err;
       if (i < attempts - 1) {
-        await new Promise((r) => setTimeout(r, 3000 * (i + 1)));
+        await new Promise((r) => setTimeout(r, 4000 * (i + 1)));
         continue;
       }
     }
@@ -98,12 +104,25 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
     try {
       data = JSON.parse(raw);
     } catch {
-      if (!res.ok) throw new Error(raw.slice(0, 180) || `Request failed (${res.status})`);
+      if (!res.ok) {
+        if (looksLikeHtml(raw) || res.status === 429) {
+          throw new Error(
+            'The API host is rate-limiting right now (Cloudflare). Wait a minute, then try again.',
+          );
+        }
+        throw new Error(`Request failed (${res.status})`);
+      }
+      throw new Error('Unexpected response from API');
     }
   }
   if (!res.ok) {
-    if (res.status === 413 || raw.includes('PayloadTooLarge') || raw.includes('<!DOCTYPE')) {
+    if (res.status === 413 || raw.includes('PayloadTooLarge')) {
       throw new Error('That file is too large to paste. Use the file picker on the Videos tab (max 80 MB).');
+    }
+    if (looksLikeHtml(raw) || res.status === 429) {
+      throw new Error(
+        'The API host is rate-limiting right now (Cloudflare). Wait a minute, then try again.',
+      );
     }
     if (res.status === 502 || res.status === 503 || res.status === 504) {
       throw new Error(
