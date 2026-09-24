@@ -352,6 +352,72 @@ adminRouter.post('/members/:id/credit', admin, async (req, res) => {
   }
 });
 
+/** POST /api/admin/members/:id/credit/cancel — revoke admin-granted subscription time */
+adminRouter.post('/members/:id/credit/cancel', admin, async (req, res) => {
+  try {
+    const id = routeParam(req, 'id');
+    const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
+    const existing = await prisma.user.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ error: 'Member not found' });
+      return;
+    }
+    if (!existing.subscriptionPaidUntil) {
+      res.status(400).json({ error: 'This member has no admin-credited time to cancel.' });
+      return;
+    }
+
+    const previousUntil = existing.subscriptionPaidUntil;
+    const user = await prisma.user.update({
+      where: { id },
+      data: { subscriptionPaidUntil: null },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        subscriptionTier: true,
+        subscriptionStatus: true,
+        subscriptionPaidUntil: true,
+        stripeSubscriptionId: true,
+      },
+    });
+
+    const untilLabel = previousUntil.toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+
+    try {
+      await prisma.memberMessage.create({
+        data: {
+          userId: id,
+          title: 'Subscription credit cancelled',
+          body: [
+            'An administrator cancelled your complimentary subscription credit.',
+            `Previous credit ran until ${untilLabel}.`,
+            user.stripeSubscriptionId
+              ? 'Any active paid Stripe subscription is unchanged.'
+              : 'You no longer have admin-granted access time.',
+            note ? `\nNote: ${note}` : '',
+          ].filter(Boolean).join('\n'),
+        },
+      });
+    } catch (mailErr) {
+      console.warn('[admin] credit-cancel message failed', mailErr);
+    }
+
+    res.json({
+      ...user,
+      cancelledUntil: previousUntil.toISOString(),
+      message: `Cancelled credited time for ${user.name} (was until ${untilLabel}).`,
+    });
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : String(err);
+    res.status(400).json({ error: raw });
+  }
+});
+
 /** PATCH /api/admin/members/:id/role */
 adminRouter.patch('/members/:id/role', superOnly, async (req, res) => {
   const { role } = req.body as { role: 'member' | 'manager' | 'super_admin' };

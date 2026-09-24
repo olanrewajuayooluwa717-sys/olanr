@@ -723,9 +723,10 @@ function AdminPageInner() {
           ? `${amount} week${amount === 1 ? '' : 's'}`
           : `${data.daysCredited ?? amount} day${(data.daysCredited ?? amount) === 1 ? '' : 's'}`;
       const who = memberDetail?.name ?? 'User';
-      const okMsg = `${who} has been credited with additional ${unitLabel}. Active until ${until}.`;
+      const okMsg =
+        data.message ??
+        `${who} has been credited with additional ${unitLabel}. Active until ${until}.`;
       setCreditNote('');
-      // Refresh list + detail without wiping the success banner.
       await load();
       try {
         const detail = await apiFetch(`/api/admin/members/${id}`);
@@ -734,6 +735,37 @@ function AdminPageInner() {
         /* keep prior detail */
       }
       setCreditOk(okMsg);
+    } catch (e) {
+      const msg = String(e).replace(/^Error:\s*/, '');
+      setCreditErr(msg);
+      setError(msg);
+    } finally {
+      setCreditBusy(false);
+    }
+  };
+
+  const cancelCredit = async (id: string) => {
+    if (!window.confirm('Cancel all admin-credited subscription time for this member?')) return;
+    setCreditBusy(true);
+    setCreditOk(null);
+    setCreditErr(null);
+    setError(null);
+    try {
+      const data = await apiFetch(`/api/admin/members/${id}/credit/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({
+          ...(creditNote.trim() ? { note: creditNote.trim() } : {}),
+        }),
+      });
+      setCreditNote('');
+      await load();
+      try {
+        const detail = await apiFetch(`/api/admin/members/${id}`);
+        setMemberDetail(detail);
+      } catch {
+        /* keep prior detail */
+      }
+      setCreditOk(data.message ?? 'Credited time cancelled.');
     } catch (e) {
       const msg = String(e).replace(/^Error:\s*/, '');
       setCreditErr(msg);
@@ -1227,8 +1259,18 @@ function AdminPageInner() {
                         onClick={() => creditSubscription(memberDetail.id)}
                         style={{ ...adminBtn, opacity: creditBusy ? 0.6 : 1 }}
                       >
-                        {creditBusy ? 'Crediting…' : 'Credit time'}
+                        {creditBusy ? 'Working…' : 'Credit time'}
                       </button>
+                      {memberDetail.subscriptionPaidUntil ? (
+                        <button
+                          type="button"
+                          disabled={creditBusy}
+                          onClick={() => cancelCredit(memberDetail.id)}
+                          style={{ ...adminBtnDanger, opacity: creditBusy ? 0.6 : 1 }}
+                        >
+                          Cancel credited time
+                        </button>
+                      ) : null}
                     </div>
                     {creditOk && (
                       <p style={{ margin: 0, color: '#15803d', fontSize: '0.9rem', fontWeight: 600 }}>{creditOk}</p>
