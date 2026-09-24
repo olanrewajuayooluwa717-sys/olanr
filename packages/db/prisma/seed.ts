@@ -7,6 +7,7 @@ async function main() {
     where: { email: 'logunsina@yahoo.com' },
     update: {
       passwordHash,
+      name: 'Demo Farmer',
       categories: ['table_fish_farmer', 'fish_breeder'],
       estimatedFishOutputYear: '100 tonnes/Annum',
       state: 'Oyo',
@@ -15,7 +16,7 @@ async function main() {
     },
     create: {
       email: 'logunsina@yahoo.com',
-      name: 'AYOOLUWA OGUNSINA',
+      name: 'Demo Farmer',
       passwordHash,
       role: 'member',
       subscriptionTier: 'standard',

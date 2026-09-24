@@ -77,6 +77,7 @@ function buildDisplayPayload(cycle: {
       country: string;
       user: {
         name: string;
+        surname?: string | null;
         email?: string;
         gender?: string | null;
         phone?: string | null;
@@ -92,7 +93,7 @@ function buildDisplayPayload(cycle: {
   const firstFeedingDate = new Date(cycle.stockingDate);
   firstFeedingDate.setDate(firstFeedingDate.getDate() + 1);
   return {
-    farmerName: user.name,
+    farmerName: [user.name, user.surname].filter(Boolean).join(' ').trim() || 'Farmer',
     gender: user.gender ?? null,
     phone: user.phone ?? null,
     email: user.email ?? null,
@@ -299,11 +300,12 @@ cyclesRouter.post('/', async (req, res) => {
 
     if (!user && email) {
       const passwordHash = password ? await bcrypt.hash(String(password), 10) : null;
+      const displayName = [farmerName, surname].filter((p) => String(p ?? '').trim()).map(String).join(' ').trim();
       user = await prisma.user.create({
         data: {
           email,
-          name: farmerName ?? email,
-          surname: surname ?? null,
+          name: displayName || String(email),
+          surname: surname ? String(surname) : null,
           gender: gender ?? null,
           ageRange: ageRange ?? null,
           phone: fullPhone,
@@ -320,13 +322,32 @@ cyclesRouter.post('/', async (req, res) => {
         },
       });
     } else if (user) {
+      // Already registered: do not silently attach a new farm under another person's identity.
+      if (user.passwordHash && password) {
+        const ok = await bcrypt.compare(String(password), user.passwordHash);
+        if (!ok) {
+          res.status(409).json({
+            error: 'This email is already registered. Sign in, then add another farm from your account.',
+          });
+          return;
+        }
+      } else if (user.passwordHash && !password) {
+        res.status(409).json({
+          error: 'This email is already registered. Sign in with your password.',
+        });
+        return;
+      }
+
       const cat = normalizeCategories(categories);
+      const displayName = [farmerName, surname].filter((p) => String(p ?? '').trim()).map(String).join(' ').trim();
       user = await prisma.user.update({
         where: { id: user.id },
         data: {
           ...(password && !user.passwordHash
             ? { passwordHash: await bcrypt.hash(String(password), 10) }
             : {}),
+          ...(displayName ? { name: displayName } : {}),
+          ...(surname !== undefined ? { surname: surname ? String(surname) : null } : {}),
           ...(cat.length ? { categories: cat } : {}),
           ...(estimatedFishOutputYear
             ? { estimatedFishOutputYear: String(estimatedFishOutputYear) }

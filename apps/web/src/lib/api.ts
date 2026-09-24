@@ -25,11 +25,16 @@ export function getToken(): string | null {
 
 export function setAuth(
   token: string,
-  cycleId?: string,
+  cycleId?: string | null,
   user?: { role?: string; name?: string; email?: string },
 ) {
   localStorage.setItem('fishmaster_token', token);
-  if (cycleId) localStorage.setItem('fishmaster_cycle_id', cycleId);
+  if (cycleId) {
+    localStorage.setItem('fishmaster_cycle_id', cycleId);
+  } else {
+    // Login / switch account: never keep another member's saved cycle.
+    localStorage.removeItem('fishmaster_cycle_id');
+  }
   if (user?.role) localStorage.setItem('fishmaster_role', user.role);
   if (user?.name) localStorage.setItem('fishmaster_name', user.name);
   if (user?.email) localStorage.setItem('fishmaster_email', user.email);

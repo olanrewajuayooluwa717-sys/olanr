@@ -66,7 +66,13 @@ export function DesktopTodayRail() {
       setPonds(pondList);
 
       const saved = localStorage.getItem('fishmaster_cycle_id');
-      const { report, cycleId, pondName, display } = await fetchCycleReport(saved);
+      const ownedId =
+        (saved && cycles.some((c) => c.id === saved) ? saved : null) ?? cycles[0]?.id ?? null;
+      if (!ownedId) {
+        setToday(null);
+        return;
+      }
+      const { report, cycleId, pondName, display } = await fetchCycleReport(ownedId);
       if (cycleId) setCycleId(cycleId);
 
       const todayDate = new Date();

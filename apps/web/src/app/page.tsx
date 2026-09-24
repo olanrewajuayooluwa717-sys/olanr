@@ -42,10 +42,14 @@ export default function HomePage() {
     setLoading(true);
     const resolveId = async () => {
       if (overrideCycleId) return overrideCycleId;
-      const saved = localStorage.getItem('fishmaster_cycle_id');
-      if (saved) return saved;
-      if (!getToken()) return null;
+      if (!getToken()) {
+        // Guests only see the anonymised demo — never a leftover cycle id from another session.
+        return null;
+      }
       const cycles = await fetchUserCycles();
+      if (!cycles.length) return null;
+      const saved = localStorage.getItem('fishmaster_cycle_id');
+      if (saved && cycles.some((c) => c.id === saved)) return saved;
       return cycles[0]?.id ?? null;
     };
 
