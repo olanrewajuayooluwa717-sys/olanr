@@ -296,7 +296,7 @@ export function AppDisplayPage({
           >
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
               <Tile label="Extensive" value={report.advisedStocking.extensive.toFixed(0)} />
-              <Tile label="Semi" value={report.advisedStocking.semiIntensive.toFixed(0)} />
+              <Tile label="Semi-intensive" value={report.advisedStocking.semiIntensive.toFixed(0)} />
               <Tile label="Intensive" value={report.advisedStocking.intensive.toFixed(0)} />
             </div>
           </Post>
