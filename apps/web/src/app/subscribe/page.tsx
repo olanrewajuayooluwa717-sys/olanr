@@ -46,8 +46,8 @@ function formatMembership(data: {
     } else if (active) {
       detail =
         days === 0
-          ? 'Renews today.'
-          : `${days} ${dayWord} to next renewal.`;
+          ? 'Membership period ends today.'
+          : `${days} ${dayWord} to subscription expiration.`;
     } else {
       detail =
         days === 0

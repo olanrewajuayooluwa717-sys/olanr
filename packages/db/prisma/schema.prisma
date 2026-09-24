@@ -69,6 +69,8 @@ model User {
   role               UserRole           @default(member)
   subscriptionTier   SubscriptionTier   @default(basic)
   subscriptionStatus SubscriptionStatus @default(active)
+  /// Admin-granted access end (extends beyond or instead of Stripe period)
+  subscriptionPaidUntil DateTime?
   stripeCustomerId     String?
   stripeSubscriptionId String?
   farms              Farm[]

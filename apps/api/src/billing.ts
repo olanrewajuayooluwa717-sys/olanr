@@ -36,17 +36,36 @@ async function syncSubscriptionFromStripe(userId: string): Promise<{
   currentPeriodEnd: string | null;
   daysRemaining: number | null;
   cancelAtPeriodEnd: boolean;
+  paidUntil: string | null;
 }> {
   const emptyPeriod = {
     currentPeriodEnd: null as string | null,
     daysRemaining: null as number | null,
     cancelAtPeriodEnd: false,
+    paidUntil: null as string | null,
   };
   const stripe = getStripe();
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new Error('User not found');
+
+  const creditOnlyPeriod = () => {
+    const creditMs = user.subscriptionPaidUntil?.getTime() ?? 0;
+    if (creditMs <= 0) return { ...emptyPeriod };
+    return {
+      currentPeriodEnd: new Date(creditMs).toISOString(),
+      daysRemaining: Math.max(0, Math.ceil((creditMs - Date.now()) / 86_400_000)),
+      cancelAtPeriodEnd: false,
+      paidUntil: user.subscriptionPaidUntil!.toISOString(),
+    };
+  };
+
   if (!stripe) {
-    return { tier: user.subscriptionTier, status: user.subscriptionStatus, synced: false, ...emptyPeriod };
+    return {
+      tier: user.subscriptionTier,
+      status: user.subscriptionStatus,
+      synced: false,
+      ...creditOnlyPeriod(),
+    };
   }
 
   let customerId = user.stripeCustomerId;
@@ -65,7 +84,12 @@ async function syncSubscriptionFromStripe(userId: string): Promise<{
   }
 
   if (!customerId) {
-    return { tier: user.subscriptionTier, status: user.subscriptionStatus, synced: false, ...emptyPeriod };
+    return {
+      tier: user.subscriptionTier,
+      status: user.subscriptionStatus,
+      synced: false,
+      ...creditOnlyPeriod(),
+    };
   }
 
   const subs = await stripe.subscriptions.list({
@@ -78,7 +102,12 @@ async function syncSubscriptionFromStripe(userId: string): Promise<{
     subs.data.find((s) => s.status === 'past_due');
 
   if (!active) {
-    return { tier: user.subscriptionTier, status: user.subscriptionStatus, synced: false, ...emptyPeriod };
+    return {
+      tier: user.subscriptionTier,
+      status: user.subscriptionStatus,
+      synced: false,
+      ...creditOnlyPeriod(),
+    };
   }
 
   const tierFromMeta = active.metadata?.tier as SubscriptionTier | undefined;
@@ -104,19 +133,33 @@ async function syncSubscriptionFromStripe(userId: string): Promise<{
   });
 
   const periodEndMs = (active.current_period_end ?? 0) * 1000;
-  const currentPeriodEnd = periodEndMs > 0 ? new Date(periodEndMs).toISOString() : null;
+  const creditMs = updated.subscriptionPaidUntil?.getTime() ?? 0;
+  const endMs = Math.max(periodEndMs, creditMs);
+  const currentPeriodEnd = endMs > 0 ? new Date(endMs).toISOString() : null;
   const daysRemaining =
-    periodEndMs > 0
-      ? Math.max(0, Math.ceil((periodEndMs - Date.now()) / 86_400_000))
-      : null;
+    endMs > 0 ? Math.max(0, Math.ceil((endMs - Date.now()) / 86_400_000)) : null;
+  // Stripe cancel-at-period-end only applies if admin credit does not extend past Stripe.
+  const cancelAtPeriodEnd =
+    Boolean(active.cancel_at_period_end) && creditMs <= periodEndMs;
+
+  // Admin credit still in force — keep membership active even if Stripe lapsed.
+  if (creditMs > Date.now() && updated.subscriptionStatus !== 'active' && updated.subscriptionStatus !== 'suspended') {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { subscriptionStatus: 'active' },
+    });
+  }
 
   return {
     tier: updated.subscriptionTier,
-    status: updated.subscriptionStatus,
+    status: creditMs > Date.now() && updated.subscriptionStatus !== 'suspended'
+      ? 'active'
+      : updated.subscriptionStatus,
     synced: true,
     currentPeriodEnd,
     daysRemaining,
-    cancelAtPeriodEnd: Boolean(active.cancel_at_period_end),
+    cancelAtPeriodEnd,
+    paidUntil: updated.subscriptionPaidUntil?.toISOString() ?? null,
   };
 }
 
@@ -133,6 +176,7 @@ billingRouter.get('/status', requireAuth, async (req, res) => {
       currentPeriodEnd: null as string | null,
       daysRemaining: null as number | null,
       cancelAtPeriodEnd: false,
+      paidUntil: user.subscriptionPaidUntil?.toISOString() ?? null,
     };
 
     // Refresh membership + period end from Stripe when configured.
@@ -143,13 +187,22 @@ billingRouter.get('/status', requireAuth, async (req, res) => {
           currentPeriodEnd: synced.currentPeriodEnd,
           daysRemaining: synced.daysRemaining,
           cancelAtPeriodEnd: synced.cancelAtPeriodEnd,
+          paidUntil: synced.paidUntil,
         };
-        if (synced.synced) {
+        if (synced.synced || synced.daysRemaining != null) {
           user = await prisma.user.findUnique({ where: { id: user.id } });
         }
       } catch (err) {
         console.warn('[billing] status sync skipped', err);
       }
+    } else if (user.subscriptionPaidUntil) {
+      const creditMs = user.subscriptionPaidUntil.getTime();
+      period = {
+        currentPeriodEnd: user.subscriptionPaidUntil.toISOString(),
+        daysRemaining: Math.max(0, Math.ceil((creditMs - Date.now()) / 86_400_000)),
+        cancelAtPeriodEnd: false,
+        paidUntil: user.subscriptionPaidUntil.toISOString(),
+      };
     }
 
     if (!user) {

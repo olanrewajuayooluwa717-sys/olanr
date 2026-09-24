@@ -167,6 +167,7 @@ adminRouter.get('/members/:id', admin, async (req, res) => {
       ageRange: true, role: true, lga: true, state: true, country: true, postcode: true,
       categories: true, estimatedFishOutputYear: true,
       subscriptionTier: true, subscriptionStatus: true, createdAt: true,
+      subscriptionPaidUntil: true,
       farms: {
         include: {
           ponds: {
@@ -254,6 +255,89 @@ adminRouter.patch('/members/:id/activate', superOnly, async (req, res) => {
     data: { subscriptionStatus: 'active' },
   });
   res.json(user);
+});
+
+/** POST /api/admin/members/:id/credit — grant subscription time (days or weeks) */
+adminRouter.post('/members/:id/credit', admin, async (req, res) => {
+  try {
+    const id = routeParam(req, 'id');
+    const amount = Number(req.body?.amount);
+    const unit = req.body?.unit === 'weeks' ? 'weeks' : 'days';
+    const tierRaw = typeof req.body?.tier === 'string' ? req.body.tier.trim() : '';
+    const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      res.status(400).json({ error: 'Enter a positive number of days or weeks.' });
+      return;
+    }
+    const days = unit === 'weeks' ? Math.round(amount * 7) : Math.round(amount);
+    if (days < 1 || days > 3660) {
+      res.status(400).json({ error: 'Credit must be between 1 day and 10 years.' });
+      return;
+    }
+
+    const tier =
+      tierRaw === 'basic' || tierRaw === 'standard' || tierRaw === 'premium'
+        ? tierRaw
+        : undefined;
+
+    const existing = await prisma.user.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ error: 'Member not found' });
+      return;
+    }
+
+    const now = Date.now();
+    const baseMs = Math.max(now, existing.subscriptionPaidUntil?.getTime() ?? 0);
+    const subscriptionPaidUntil = new Date(baseMs + days * 86_400_000);
+
+    const user = await prisma.user.update({
+      where: { id },
+      data: {
+        subscriptionPaidUntil,
+        subscriptionStatus: 'active',
+        ...(tier ? { subscriptionTier: tier } : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        subscriptionTier: true,
+        subscriptionStatus: true,
+        subscriptionPaidUntil: true,
+      },
+    });
+
+    const unitLabel = unit === 'weeks'
+      ? `${amount} week${amount === 1 ? '' : 's'}`
+      : `${days} day${days === 1 ? '' : 's'}`;
+    const untilLabel = subscriptionPaidUntil.toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+
+    await prisma.memberMessage.create({
+      data: {
+        userId: id,
+        title: 'Subscription credit',
+        body: [
+          `An administrator credited your membership with ${unitLabel}.`,
+          `Your access is active until ${untilLabel}.`,
+          note ? `\nNote: ${note}` : '',
+        ].filter(Boolean).join('\n'),
+      },
+    });
+
+    res.json({
+      ...user,
+      daysCredited: days,
+      unit,
+      amount,
+    });
+  } catch (err) {
+    res.status(400).json({ error: String(err) });
+  }
 });
 
 /** PATCH /api/admin/members/:id/role */

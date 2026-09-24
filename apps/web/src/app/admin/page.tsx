@@ -39,6 +39,7 @@ type MemberDetail = {
   categories?: string[];
   estimatedFishOutputYear?: string | null;
   subscriptionTier: string; subscriptionStatus: string; createdAt: string;
+  subscriptionPaidUntil?: string | null;
   summary: {
     farmCount: number; pondCount: number; cycleCount: number;
     totalStocked: number; totalMortality: number; presentQtyEstimate: number;
@@ -266,6 +267,12 @@ function AdminPageInner() {
 
   const [staffForm, setStaffForm] = useState({ name: '', email: '', password: '', phone: '' });
   const [staffOk, setStaffOk] = useState<string | null>(null);
+  const [creditAmount, setCreditAmount] = useState('30');
+  const [creditUnit, setCreditUnit] = useState<'days' | 'weeks'>('days');
+  const [creditTier, setCreditTier] = useState('');
+  const [creditNote, setCreditNote] = useState('');
+  const [creditBusy, setCreditBusy] = useState(false);
+  const [creditOk, setCreditOk] = useState<string | null>(null);
   const isSuper = getRole() === 'super_admin';
 
   useEffect(() => {
@@ -374,6 +381,7 @@ function AdminPageInner() {
     setMemberError(null);
     setMemberLoading(true);
     setDetailTab('overview');
+    setCreditOk(null);
     try {
       const detail = await apiFetch(`/api/admin/members/${id}`);
       setMemberDetail(detail);
@@ -664,6 +672,41 @@ function AdminPageInner() {
     await apiFetch(`/api/admin/members/${id}/activate`, { method: 'PATCH' });
     load();
     if (selectedMemberId === id) openMember(id);
+  };
+
+  const creditSubscription = async (id: string) => {
+    const amount = Number(creditAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError('Enter a positive number of days or weeks to credit.');
+      return;
+    }
+    setCreditBusy(true);
+    setCreditOk(null);
+    setError(null);
+    try {
+      const data = await apiFetch(`/api/admin/members/${id}/credit`, {
+        method: 'POST',
+        body: JSON.stringify({
+          amount,
+          unit: creditUnit,
+          ...(creditTier ? { tier: creditTier } : {}),
+          ...(creditNote.trim() ? { note: creditNote.trim() } : {}),
+        }),
+      });
+      const until = data.subscriptionPaidUntil
+        ? new Date(data.subscriptionPaidUntil).toLocaleDateString()
+        : '—';
+      setCreditOk(
+        `Credited ${data.daysCredited} day${data.daysCredited === 1 ? '' : 's'} — active until ${until}.`,
+      );
+      setCreditNote('');
+      load();
+      openMember(id);
+    } catch (e) {
+      setError(String(e).replace(/^Error:\s*/, ''));
+    } finally {
+      setCreditBusy(false);
+    }
   };
 
   const deletePost = async (id: string) => {
@@ -1087,6 +1130,74 @@ function AdminPageInner() {
                   </div>
                   <div><strong>Est. output / year:</strong> {memberDetail.estimatedFishOutputYear ?? '—'}</div>
                   <div><strong>Role / plan:</strong> {memberDetail.role} · {memberDetail.subscriptionTier} · <StatusPill status={memberDetail.subscriptionStatus} /></div>
+                  <div>
+                    <strong>Paid / credited until:</strong>{' '}
+                    {memberDetail.subscriptionPaidUntil
+                      ? new Date(memberDetail.subscriptionPaidUntil).toLocaleString()
+                      : '—'}
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: '0.5rem',
+                      padding: '0.85rem 1rem',
+                      background: '#f0fdfa',
+                      border: '1px solid #99f6e4',
+                      borderRadius: 10,
+                      display: 'grid',
+                      gap: '0.65rem',
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, color: '#0f766e' }}>Credit subscription time</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={creditAmount}
+                        onChange={(e) => setCreditAmount(e.target.value)}
+                        style={{ ...adminInput, width: 88 }}
+                        aria-label="Credit amount"
+                      />
+                      <select
+                        value={creditUnit}
+                        onChange={(e) => setCreditUnit(e.target.value as 'days' | 'weeks')}
+                        style={{ ...adminInput, width: 110 }}
+                        aria-label="Credit unit"
+                      >
+                        <option value="days">Days</option>
+                        <option value="weeks">Weeks</option>
+                      </select>
+                      <select
+                        value={creditTier}
+                        onChange={(e) => setCreditTier(e.target.value)}
+                        style={{ ...adminInput, minWidth: 150 }}
+                        aria-label="Plan tier"
+                      >
+                        <option value="">Keep current plan</option>
+                        <option value="basic">Fishmaster Lite</option>
+                        <option value="standard">Fishmaster Plus</option>
+                        <option value="premium">Fishmaster Max</option>
+                      </select>
+                    </div>
+                    <input
+                      placeholder="Optional note to the member"
+                      value={creditNote}
+                      onChange={(e) => setCreditNote(e.target.value)}
+                      style={adminInput}
+                    />
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        disabled={creditBusy}
+                        onClick={() => creditSubscription(memberDetail.id)}
+                        style={{ ...adminBtn, opacity: creditBusy ? 0.6 : 1 }}
+                      >
+                        {creditBusy ? 'Crediting…' : 'Credit time'}
+                      </button>
+                      {creditOk && <span style={{ color: '#15803d', fontSize: '0.85rem' }}>{creditOk}</span>}
+                    </div>
+                  </div>
                   <div>
                     <strong>Farms:</strong>{' '}
                     {memberDetail.farms.length === 0 ? 'None' : memberDetail.farms.map((f) => (
