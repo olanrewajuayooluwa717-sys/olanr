@@ -273,6 +273,7 @@ function AdminPageInner() {
   const [creditNote, setCreditNote] = useState('');
   const [creditBusy, setCreditBusy] = useState(false);
   const [creditOk, setCreditOk] = useState<string | null>(null);
+  const [creditErr, setCreditErr] = useState<string | null>(null);
   const isSuper = getRole() === 'super_admin';
 
   useEffect(() => {
@@ -382,6 +383,7 @@ function AdminPageInner() {
     setMemberLoading(true);
     setDetailTab('overview');
     setCreditOk(null);
+    setCreditErr(null);
     try {
       const detail = await apiFetch(`/api/admin/members/${id}`);
       setMemberDetail(detail);
@@ -648,18 +650,32 @@ function AdminPageInner() {
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     setMsgOk(null);
-    const payload = {
-      title: msgForm.title,
-      body: msgForm.body,
-      ...(msgForm.reportNum ? { reportNum: Number(msgForm.reportNum) } : {}),
-      ...(msgForm.pondId ? { pondId: msgForm.pondId, pondLabel: msgForm.pondLabel } : {}),
-    };
-    await apiFetch(`/api/admin/members/${msgForm.userId}/messages`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-    setMsgForm((f) => ({ ...f, title: '', body: '', reportNum: '' }));
-    setMsgOk('Message sent to member.');
+    setError(null);
+    if (!msgForm.userId) {
+      setError('Choose a member to message.');
+      return;
+    }
+    if (!msgForm.title.trim() || !msgForm.body.trim()) {
+      setError('Title and message body are required.');
+      return;
+    }
+    try {
+      const payload = {
+        title: msgForm.title.trim(),
+        body: msgForm.body.trim(),
+        ...(msgForm.reportNum ? { reportNum: Number(msgForm.reportNum) } : {}),
+        ...(msgForm.pondId ? { pondId: msgForm.pondId, pondLabel: msgForm.pondLabel } : {}),
+      };
+      await apiFetch(`/api/admin/members/${msgForm.userId}/messages`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      const who = members.find((m) => m.id === msgForm.userId);
+      setMsgForm((f) => ({ ...f, title: '', body: '', reportNum: '', pondId: '', pondLabel: '' }));
+      setMsgOk(`Note sent to ${who?.name ?? 'member'}. They will see it under Messages.`);
+    } catch (err) {
+      setError(String(err).replace(/^Error:\s*/, ''));
+    }
   };
 
   const suspend = async (id: string) => {
@@ -677,11 +693,13 @@ function AdminPageInner() {
   const creditSubscription = async (id: string) => {
     const amount = Number(creditAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
-      setError('Enter a positive number of days or weeks to credit.');
+      setCreditErr('Enter a positive number of days or weeks to credit.');
+      setCreditOk(null);
       return;
     }
     setCreditBusy(true);
     setCreditOk(null);
+    setCreditErr(null);
     setError(null);
     try {
       const data = await apiFetch(`/api/admin/members/${id}/credit`, {
@@ -694,16 +712,32 @@ function AdminPageInner() {
         }),
       });
       const until = data.subscriptionPaidUntil
-        ? new Date(data.subscriptionPaidUntil).toLocaleDateString()
+        ? new Date(data.subscriptionPaidUntil).toLocaleDateString(undefined, {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        })
         : '—';
-      setCreditOk(
-        `Credited ${data.daysCredited} day${data.daysCredited === 1 ? '' : 's'} — active until ${until}.`,
-      );
+      const unitLabel =
+        creditUnit === 'weeks'
+          ? `${amount} week${amount === 1 ? '' : 's'}`
+          : `${data.daysCredited ?? amount} day${(data.daysCredited ?? amount) === 1 ? '' : 's'}`;
+      const who = memberDetail?.name ?? 'User';
+      const okMsg = `${who} has been credited with additional ${unitLabel}. Active until ${until}.`;
       setCreditNote('');
-      load();
-      openMember(id);
+      // Refresh list + detail without wiping the success banner.
+      await load();
+      try {
+        const detail = await apiFetch(`/api/admin/members/${id}`);
+        setMemberDetail(detail);
+      } catch {
+        /* keep prior detail */
+      }
+      setCreditOk(okMsg);
     } catch (e) {
-      setError(String(e).replace(/^Error:\s*/, ''));
+      const msg = String(e).replace(/^Error:\s*/, '');
+      setCreditErr(msg);
+      setError(msg);
     } finally {
       setCreditBusy(false);
     }
@@ -1195,8 +1229,13 @@ function AdminPageInner() {
                       >
                         {creditBusy ? 'Crediting…' : 'Credit time'}
                       </button>
-                      {creditOk && <span style={{ color: '#15803d', fontSize: '0.85rem' }}>{creditOk}</span>}
                     </div>
+                    {creditOk && (
+                      <p style={{ margin: 0, color: '#15803d', fontSize: '0.9rem', fontWeight: 600 }}>{creditOk}</p>
+                    )}
+                    {creditErr && (
+                      <p style={{ margin: 0, color: '#dc2626', fontSize: '0.9rem' }}>{creditErr}</p>
+                    )}
                   </div>
                   <div>
                     <strong>Farms:</strong>{' '}
@@ -1570,8 +1609,9 @@ function AdminPageInner() {
       {section === 'messages' && (
         <AdminPanel title="Message a member">
           <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '0 0 0.75rem' }}>
-            Send report-linked or pond-specific advice to one member.
+            Send a note or pond advice to one member. They see it under <strong>Messages</strong> after they sign in.
           </p>
+          {msgOk && <p style={{ color: '#15803d', margin: '0 0 0.75rem' }}>{msgOk}</p>}
           <form onSubmit={sendMessage} style={{ display: 'grid', gap: '0.75rem' }}>
             <select
               required
@@ -1579,10 +1619,11 @@ function AdminPageInner() {
               onChange={(e) => {
                 const uid = e.target.value;
                 setMsgForm({ ...msgForm, userId: uid, pondId: '', pondLabel: '' });
-                loadPonds(uid);
+                if (uid) loadPonds(uid);
               }}
               style={adminInput}
             >
+              <option value="">Select member…</option>
               {members.map((m) => (
                 <option key={m.id} value={m.id}>{m.name} ({m.email})</option>
               ))}
@@ -1617,8 +1658,8 @@ function AdminPageInner() {
               ))}
             </select>
             <input placeholder="Title" required value={msgForm.title} onChange={(e) => setMsgForm({ ...msgForm, title: e.target.value })} style={adminInput} />
-            <textarea placeholder="Message body" required rows={5} value={msgForm.body} onChange={(e) => setMsgForm({ ...msgForm, body: e.target.value })} style={adminInput} />
-            <button type="submit" style={{ ...adminBtn, width: 'fit-content' }}>Send to member</button>
+            <textarea placeholder="Message body / note" required rows={5} value={msgForm.body} onChange={(e) => setMsgForm({ ...msgForm, body: e.target.value })} style={adminInput} />
+            <button type="submit" style={{ ...adminBtn, width: 'fit-content' }}>Send note to member</button>
           </form>
         </AdminPanel>
       )}

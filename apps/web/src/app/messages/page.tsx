@@ -10,6 +10,7 @@ type Message = {
   title: string;
   body: string;
   reportNum: number | null;
+  pondLabel?: string | null;
   read: boolean;
   createdAt: string;
 };
@@ -44,6 +45,7 @@ export default function MessagesPage() {
         <Card key={m.id} title={m.title}>
           <p style={{ fontSize: '0.85rem', color: '#888', margin: '0 0 0.5rem' }}>
             {new Date(m.createdAt).toLocaleString()}
+            {m.pondLabel ? ` · ${m.pondLabel}` : ''}
             {m.reportNum ? ` · Report ${m.reportNum}` : ''}
             {!m.read && ' · New'}
           </p>

@@ -317,26 +317,38 @@ adminRouter.post('/members/:id/credit', admin, async (req, res) => {
       year: 'numeric',
     });
 
-    await prisma.memberMessage.create({
-      data: {
-        userId: id,
-        title: 'Subscription credit',
-        body: [
-          `An administrator credited your membership with ${unitLabel}.`,
-          `Your access is active until ${untilLabel}.`,
-          note ? `\nNote: ${note}` : '',
-        ].filter(Boolean).join('\n'),
-      },
-    });
+    try {
+      await prisma.memberMessage.create({
+        data: {
+          userId: id,
+          title: 'Subscription credit',
+          body: [
+            `An administrator credited your membership with ${unitLabel}.`,
+            `Your access is active until ${untilLabel}.`,
+            note ? `\nNote: ${note}` : '',
+          ].filter(Boolean).join('\n'),
+        },
+      });
+    } catch (mailErr) {
+      console.warn('[admin] credit message failed', mailErr);
+    }
 
     res.json({
       ...user,
       daysCredited: days,
       unit,
       amount,
+      message: `${user.name} has been credited with additional ${unitLabel}. Active until ${untilLabel}.`,
     });
   } catch (err) {
-    res.status(400).json({ error: String(err) });
+    const raw = err instanceof Error ? err.message : String(err);
+    const missingColumn =
+      /subscriptionPaidUntil/i.test(raw) || /column .* does not exist/i.test(raw);
+    res.status(400).json({
+      error: missingColumn
+        ? 'Database is missing subscriptionPaidUntil — redeploy the API so prisma db push can run, then try again.'
+        : raw,
+    });
   }
 });
 
@@ -487,30 +499,38 @@ adminRouter.get('/members/:id/ponds', admin, async (req, res) => {
 
 /** POST /api/admin/members/:id/messages — send report/info to one member (optional pond) */
 adminRouter.post('/members/:id/messages', admin, async (req, res) => {
-  const { title, body, reportNum, pondId, pondLabel } = req.body as {
-    title: string;
-    body: string;
-    reportNum?: number;
-    pondId?: string;
-    pondLabel?: string;
-  };
-  const userId = routeParam(req, 'id');
-  const member = await prisma.user.findUnique({ where: { id: userId } });
-  if (!member) {
-    res.status(404).json({ error: 'Member not found' });
-    return;
+  try {
+    const { title, body, reportNum, pondId, pondLabel } = req.body as {
+      title: string;
+      body: string;
+      reportNum?: number;
+      pondId?: string;
+      pondLabel?: string;
+    };
+    const userId = routeParam(req, 'id');
+    if (!title?.trim() || !body?.trim()) {
+      res.status(400).json({ error: 'Title and message body are required.' });
+      return;
+    }
+    const member = await prisma.user.findUnique({ where: { id: userId } });
+    if (!member) {
+      res.status(404).json({ error: 'Member not found' });
+      return;
+    }
+    const message = await prisma.memberMessage.create({
+      data: {
+        userId,
+        pondId: pondId || null,
+        pondLabel: pondLabel || null,
+        title: title.trim(),
+        body: body.trim(),
+        reportNum: reportNum != null && reportNum !== ('' as unknown) ? Number(reportNum) : null,
+      },
+    });
+    res.status(201).json(message);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
   }
-  const message = await prisma.memberMessage.create({
-    data: {
-      userId,
-      pondId: pondId ?? null,
-      pondLabel: pondLabel ?? null,
-      title,
-      body,
-      reportNum: reportNum ?? null,
-    },
-  });
-  res.status(201).json(message);
 });
 
 /** GET /api/admin/ingredients */
