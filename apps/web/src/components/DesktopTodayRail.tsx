@@ -23,6 +23,7 @@ type TodayBits = {
   feedDueKg: number | null;
   fedKg: number | null;
   note: string | null;
+  activities: string[];
 };
 
 function sameDay(a: Date, b: Date) {
@@ -76,6 +77,7 @@ export function DesktopTodayRail() {
       let fedKg: number | null = null;
       let dayInCulture: number | null = row?.dayInCycle ?? null;
       let note: string | null = null;
+      let activities: string[] = [];
 
       if (cycleId) {
         try {
@@ -85,8 +87,9 @@ export function DesktopTodayRail() {
           if (dash.dayInCulture) dayInCulture = dash.dayInCulture;
           if (dash.pondCleaning?.dueToday) note = 'Cleaning due today';
           else if (dash.pondCleaning?.daysUntilNextCleaning != null) {
-            note = `Clean in ${dash.pondCleaning.daysUntilNextCleaning}d`;
+            note = `Clean in ${dash.pondCleaning.daysUntilNextCleaning} days`;
           }
+          if (Array.isArray(dash.todayActivities)) activities = dash.todayActivities;
         } catch {
           /* rail still useful without dashboard */
         }
@@ -103,6 +106,7 @@ export function DesktopTodayRail() {
         feedDueKg,
         fedKg,
         note,
+        activities,
       });
     } catch {
       setToday(null);
@@ -126,8 +130,8 @@ export function DesktopTodayRail() {
       <aside className="member-rail" aria-label="Today">
         <div className="rail-card">
           <p className="rail-kicker">Today</p>
-          <h2 className="rail-title">Your pond log</h2>
-          <p className="rail-copy">Sign in to see today’s ration, switch ponds, and log feeding.</p>
+          <h2 className="rail-title">Your daily log</h2>
+          <p className="rail-copy">Sign in to see today’s ration, switch ponds, and record activities.</p>
           <Link href="/login" className="rail-primary">Sign in</Link>
           <Link href="/register" className="rail-ghost">Register</Link>
         </div>
@@ -169,9 +173,14 @@ export function DesktopTodayRail() {
               </p>
             )}
             {today.note && <p className="rail-note">{today.note}</p>}
+            {today.activities.length > 0 && (
+              <p className="rail-copy">
+                <strong>Activities:</strong> {today.activities.join(' · ')}
+              </p>
+            )}
 
             <button type="button" className="rail-primary" onClick={openPondLog}>
-              Log today
+              Daily log
             </button>
 
             {ponds.length > 1 && today.cycleId && (

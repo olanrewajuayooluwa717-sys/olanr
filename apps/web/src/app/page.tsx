@@ -28,6 +28,7 @@ export default function HomePage() {
   const [logOpen, setLogOpen] = useState(false);
   const [flash, setFlash] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(null);
   const [statusNote, setStatusNote] = useState<string | null>(null);
+  const [todayActivities, setTodayActivities] = useState<string[]>([]);
 
   const showFlash = (tone: 'ok' | 'warn', text: string) => {
     setFlash({ tone, text });
@@ -71,8 +72,12 @@ export default function HomePage() {
               else if (dash.pondCleaning) bits.push(`Clean in ${dash.pondCleaning.daysUntilNextCleaning} days`);
               if (isStaff && dash.averageFcr != null) bits.push(`FCR ${dash.averageFcr.toFixed(2)}`);
               setStatusNote(bits.join(' · ') || null);
+              setTodayActivities(Array.isArray(dash.todayActivities) ? dash.todayActivities : []);
             })
-            .catch(() => setStatusNote(null));
+            .catch(() => {
+              setStatusNote(null);
+              setTodayActivities([]);
+            });
         }
       })
       .catch(() =>
@@ -146,6 +151,7 @@ export default function HomePage() {
           ponds={ponds}
           cycleId={cycleId}
           statusNote={statusNote}
+          todayActivities={todayActivities}
           onLog={() => setLogOpen(true)}
           onSwitchPond={(id) => load(id)}
         />

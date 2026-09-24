@@ -446,6 +446,7 @@ cyclesRouter.get('/:id/dashboard', async (req, res) => {
       include: {
         ...cycleInclude,
         weightSamples: { orderBy: { date: 'desc' }, take: 1 },
+        operationsLogs: { orderBy: { date: 'desc' }, take: 14 },
       },
     });
     if (!cycle) {
@@ -472,6 +473,19 @@ cyclesRouter.get('/:id/dashboard', async (req, res) => {
     );
     const cleaning = pondCleaningSchedule(dayInCycle);
 
+    const todayOps = cycle.operationsLogs.find((l) => l.date.toDateString() === today.toDateString());
+    const todayActivities: string[] = [];
+    if (todayOps) {
+      if (todayOps.medication) todayActivities.push('Medication');
+      if (todayOps.grading) todayActivities.push('Grading');
+      if (todayOps.netWash) todayActivities.push('Net wash');
+      if (todayOps.pondCleaning) todayActivities.push('Pond cleaning');
+      if (todayOps.aerationCheck) todayActivities.push('Aeration');
+      if (todayOps.waterExchange) todayActivities.push('Water exchange');
+      if (todayOps.sampling) todayActivities.push('Sampling');
+      if (todayOps.notes?.trim()) todayActivities.push(`Notes: ${todayOps.notes.trim()}`);
+    }
+
     res.json({
       pondName: cycle.pond.name,
       dayInCulture: dayInCycle,
@@ -493,6 +507,7 @@ cyclesRouter.get('/:id/dashboard', async (req, res) => {
       averageFcr: report.averageFcr,
       feedBrands: cycle.feedBrands,
       pondCleaning: cleaning,
+      todayActivities,
     });
   } catch (err) {
     res.status(400).json({ error: String(err) });

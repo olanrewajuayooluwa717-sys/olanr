@@ -66,6 +66,7 @@ export function AppDisplayPage({
   cycleId,
   onSwitchPond,
   statusNote,
+  todayActivities = [],
   onLog,
 }: {
   report: StockCycleReport;
@@ -75,6 +76,7 @@ export function AppDisplayPage({
   cycleId?: string | null;
   onSwitchPond?: (id: string) => void;
   statusNote?: string | null;
+  todayActivities?: string[];
   onLog?: () => void;
 }) {
   const [tab, setTab] = useState<Tab>('feed');
@@ -170,6 +172,11 @@ export function AppDisplayPage({
         {statusNote ? (
           <p style={{ margin: '10px 0 0', fontSize: '0.84rem', color: '#0d4f6e', fontWeight: 600 }}>{statusNote}</p>
         ) : null}
+        {todayActivities.length > 0 ? (
+          <p style={{ margin: '8px 0 0', fontSize: '0.82rem', color: '#475569', lineHeight: 1.45 }}>
+            <strong style={{ color: '#0d4f6e' }}>Today’s activities:</strong> {todayActivities.join(' · ')}
+          </p>
+        ) : null}
         </div>
 
         {ponds.length > 1 && cycleId && onSwitchPond && (
@@ -194,7 +201,7 @@ export function AppDisplayPage({
             <span style={{ ...storyRing, boxShadow: '0 0 0 2px #fff, 0 0 0 3px #f59e0b' }}>
               <span style={{ ...storyInner, background: '#fff7ed', color: '#c2410c' }}>+</span>
             </span>
-            <span style={storyLabel}>Log</span>
+            <span style={storyLabel}>Daily log</span>
           </button>
         )}
         {m.map((x, i) => (
