@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import type { DailyFeedChartRow } from '@fishmaster/shared-types';
 import { API_URL, authHeaders, fetchCycleReport } from '../lib/api';
 
 type LogTab = 'feed' | 'mortality' | 'water' | 'power' | 'sales' | 'weight' | 'ops';
@@ -102,7 +103,7 @@ export function PondLogSheet({
     fetchCycleReport(cycleId)
       .then(({ report }) => {
         if (cancelled) return;
-        const row = report.dailyFeedCharts.flat().find((r) => sameDay(new Date(r.date), selected)) ?? null;
+        const row = report.dailyFeedCharts.flat().find((r: DailyFeedChartRow) => sameDay(new Date(r.date), selected)) ?? null;
         setExpectedKg(row?.feedKg ?? null);
         setExpectedMorningG(row?.morningFeedG ?? null);
         setExpectedEveningG(row?.eveningFeedG ?? null);
