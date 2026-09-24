@@ -10,6 +10,14 @@ export interface FishQuantityDay {
   cumulativeMortality: number;
 }
 
+/** Calendar day key in local time — avoids UTC off-by-one on mortality dates. */
+function dayKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 /** Build daily fish quantity table — `Fish Quantity Month N` sheets */
 export function buildFishQuantityDays(
   stockingDate: Date,
@@ -21,16 +29,19 @@ export function buildFishQuantityDays(
   const mortalityByDay = new Map<string, number>();
 
   for (const entry of dailyMortality) {
-    const key = entry.date.toISOString().slice(0, 10);
+    const key = dayKey(entry.date);
     mortalityByDay.set(key, (mortalityByDay.get(key) ?? 0) + entry.mortality);
   }
 
+  // Deaths logged on stocking day (before first feed) still reduce opening stock.
+  const stockingKey = dayKey(stockingDate);
+  let cumulativeMortality = mortalityByDay.get(stockingKey) ?? 0;
+
   const rows: FishQuantityDay[] = [];
-  let cumulativeMortality = 0;
 
   for (let i = 0; i < daysInMonth; i++) {
     const date = addDays(firstFeedingDate, i);
-    const key = date.toISOString().slice(0, 10);
+    const key = dayKey(date);
     const todayMortality = mortalityByDay.get(key) ?? 0;
     cumulativeMortality += todayMortality;
 

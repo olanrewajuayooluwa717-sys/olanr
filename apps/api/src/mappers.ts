@@ -41,7 +41,11 @@ export function toStockCycleInput(cycle: CycleWithRelations): StockCycleInput {
     stockingDate: cycle.stockingDate,
     desiredCrudeProteinPct: cycle.desiredCrudeProteinPct,
     desiredFeedQuantityKg: cycle.desiredFeedQuantityKg,
-    dailyMortality: cycle.mortalityLogs.map((m) => ({ date: m.date, mortality: m.count })),
+    dailyMortality: cycle.mortalityLogs.map((m) => ({
+      // Noon UTC keeps the calendar day stable across timezones.
+      date: new Date(`${m.date.toISOString().slice(0, 10)}T12:00:00.000Z`),
+      mortality: m.count,
+    })),
     dailyFeedActuals: cycle.feedLogs.map((f) => ({ date: f.date, actualFeedKg: f.actualKg })),
     feedBrands,
   };

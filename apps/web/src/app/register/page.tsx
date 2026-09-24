@@ -19,6 +19,7 @@ import {
   REGISTRATION_RANGES,
   WATER_SOURCE_OPTIONS,
   currencySymbol,
+  currencyFromCountry,
   validatePassword,
 } from '@fishmaster/shared-types';
 import { Card, btnStyle, inputStyle } from '../../components/Shell';
@@ -316,6 +317,7 @@ export default function RegisterPage() {
               setCountry(v);
               const match = COUNTRY_OPTIONS.find((c) => c.name === v);
               if (match) setPhoneCountryCode(match.dialCode);
+              setCurrency(currencyFromCountry(v));
             }}
             options={COUNTRY_OPTIONS.map((c) => c.name)}
             required

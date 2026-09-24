@@ -18,7 +18,7 @@ services:
   - type: web
     name: fishmaster-api
     runtime: node
-    plan: free
+    plan: starter
     # TypeScript and @types/* are production dependencies so this install
     # still typechecks when Render sets NODE_ENV=production.
     buildCommand: npm install --legacy-peer-deps --ignore-scripts && npm run build:api && npm run db:push -w @fishmaster/db

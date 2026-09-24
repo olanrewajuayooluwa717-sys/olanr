@@ -20,6 +20,7 @@ import {
   REGISTRATION_RANGES,
   WATER_SOURCE_OPTIONS,
   currencySymbol,
+  currencyFromCountry,
   validatePassword,
 } from '@fishmaster/shared-types';
 import { registerFarm, setAuth } from '../src/api';
@@ -251,6 +252,7 @@ export default function RegisterScreen() {
               setCountry(v);
               const match = COUNTRY_OPTIONS.find((c) => c.name === v);
               if (match) setPhoneCountryCode(match.dialCode);
+              setCurrency(currencyFromCountry(v));
             }}
           />
           <ChipSelect

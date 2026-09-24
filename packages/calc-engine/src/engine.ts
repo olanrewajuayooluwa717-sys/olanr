@@ -41,11 +41,11 @@ export function generateStockCycleReport(
     const coef = coefficients[monthIndex];
     const cycleStart = addDays(input.stockingDate, monthIndex * 30);
 
+    // Include stocking day through end of month (deaths on stocking day used to be dropped).
     const monthMortality =
       input.dailyMortality?.filter((m) => {
-        const firstFeed = addDays(cycleStart, 1);
-        const monthEnd = addDays(firstFeed, 30);
-        return m.date >= firstFeed && m.date < monthEnd;
+        const monthEnd = addDays(cycleStart, 30);
+        return m.date >= cycleStart && m.date < monthEnd;
       }) ?? [];
 
     const monthMortalityTotal = monthMortality.reduce((s, m) => s + m.mortality, 0);

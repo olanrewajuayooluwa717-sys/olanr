@@ -148,11 +148,20 @@ cyclesRouter.get('/demo/report', async (_req, res) => {
       return;
     }
     const report = generateStockCycleReport(toStockCycleInput(cycle));
+    // Guests get anonymised sample identity — never show the seed farmer’s real name.
+    const raw = buildDisplayPayload(cycle);
     res.json({
       cycleId: cycle.id,
       pondName: cycle.pond.name,
       report,
-      display: buildDisplayPayload(cycle),
+      display: {
+        ...raw,
+        farmerName: 'Sample farmer',
+        farmName: 'Sample farm',
+        email: null,
+        phone: null,
+        location: raw.city || 'Sample location',
+      },
     });
   } catch (err) {
     res.status(400).json({ error: String(err) });
@@ -523,11 +532,15 @@ cyclesRouter.post('/:id/mortality', requireAuth, async (req, res) => {
       where: {
         stockCycleId_date: {
           stockCycleId: id,
-          date: new Date(date),
+          date: new Date(`${String(date).slice(0, 10)}T12:00:00.000Z`),
         },
       },
       update: { count },
-      create: { stockCycleId: id, date: new Date(date), count },
+      create: {
+        stockCycleId: id,
+        date: new Date(`${String(date).slice(0, 10)}T12:00:00.000Z`),
+        count,
+      },
     });
     res.json(log);
   } catch (err) {

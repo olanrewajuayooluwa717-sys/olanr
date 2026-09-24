@@ -36,8 +36,17 @@ export default function HomePage() {
 
   const load = (overrideCycleId?: string | null) => {
     setLoading(true);
-    const saved = overrideCycleId ?? localStorage.getItem('fishmaster_cycle_id');
-    fetchCycleReport(saved)
+    const resolveId = async () => {
+      if (overrideCycleId) return overrideCycleId;
+      const saved = localStorage.getItem('fishmaster_cycle_id');
+      if (saved) return saved;
+      if (!getToken()) return null;
+      const cycles = await fetchUserCycles();
+      return cycles[0]?.id ?? null;
+    };
+
+    resolveId()
+      .then((id) => fetchCycleReport(id))
       .then(({ report: r, cycleId: id, pondName: name, display: d }) => {
         setReport(r);
         setDisplay(d);
@@ -59,7 +68,7 @@ export default function HomePage() {
                 );
               }
               if (dash.pondCleaning?.dueToday) bits.push('Cleaning due');
-              else if (dash.pondCleaning) bits.push(`Clean in ${dash.pondCleaning.daysUntilNextCleaning}d`);
+              else if (dash.pondCleaning) bits.push(`Clean in ${dash.pondCleaning.daysUntilNextCleaning} days`);
               if (isStaff && dash.averageFcr != null) bits.push(`FCR ${dash.averageFcr.toFixed(2)}`);
               setStatusNote(bits.join(' · ') || null);
             })

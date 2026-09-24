@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { formatMoney, currencyFromCountry } from '@fishmaster/shared-types';
 import { Card } from '../../components/Shell';
-import { apiFetch } from '../../lib/api';
+import { apiFetch, getToken } from '../../lib/api';
 
 type Product = {
   id: string;
@@ -11,21 +12,20 @@ type Product = {
   quantity: number;
   description?: string | null;
   imageUrl?: string | null;
+  currency?: string | null;
   farm?: {
     name: string;
     city?: string;
     state?: string;
+    country?: string;
     user?: { name: string };
   };
   category?: { title: string } | null;
 };
 
-function naira(n: number) {
-  return `₦${n.toLocaleString('en-NG', { maximumFractionDigits: 0 })}`;
-}
-
 export default function MarketplacePage() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [viewerCurrency, setViewerCurrency] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -34,13 +34,37 @@ export default function MarketplacePage() {
       .then(setProducts)
       .catch((e) => setError(String(e).replace('Error: ', '')))
       .finally(() => setLoading(false));
+
+    if (getToken()) {
+      // Prefer the member’s own farm currency / country when signed in.
+      apiFetch('/api/cycles')
+        .then((cycles: { pond?: { farm?: { country?: string } }; currency?: string }[]) => {
+          if (!Array.isArray(cycles) || !cycles.length) return;
+          const c0 = cycles[0];
+          const fromCycle = c0.currency?.trim();
+          const fromCountry = currencyFromCountry(c0.pond?.farm?.country);
+          setViewerCurrency((fromCycle || fromCountry || 'NGN').toUpperCase());
+        })
+        .catch(() => {});
+    }
   }, []);
+
+  const priceLabel = (p: Product) => {
+    const code = (
+      p.currency
+      || currencyFromCountry(p.farm?.country)
+      || viewerCurrency
+      || 'NGN'
+    ).toUpperCase();
+    return formatMoney(p.price, code);
+  };
 
   return (
     <main style={{ maxWidth: 960, margin: '0 auto', padding: '1.5rem 1.25rem 3rem' }}>
       <h1 style={{ color: '#0d4f6e', margin: '0 0 0.35rem' }}>Marketplace</h1>
       <p style={{ color: '#64748b', margin: '0 0 1.25rem', fontSize: '0.95rem' }}>
         Active farm listings from Fishmaster members — fresh fish and farm products.
+        Prices follow each farm’s currency (and your farm country when signed in).
       </p>
 
       {loading && <p style={{ color: '#64748b' }}>Loading products…</p>}
@@ -85,11 +109,11 @@ export default function MarketplacePage() {
             )}
             <div style={{ padding: '0.9rem 1rem 1.1rem', flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
               <strong style={{ color: '#0f172a' }}>{p.name}</strong>
-              <div style={{ color: '#0d9488', fontWeight: 700, fontSize: '1.05rem' }}>{naira(p.price)}</div>
+              <div style={{ color: '#0d9488', fontWeight: 700, fontSize: '1.05rem' }}>{priceLabel(p)}</div>
               <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                Qty: {p.quantity}
+                Quantity: {p.quantity}
                 {p.farm && (
-                  <> · {p.farm.name}{p.farm.city ? `, ${p.farm.city}` : ''}{p.farm.state ? ` (${p.farm.state})` : ''}</>
+                  <> · {p.farm.name}{p.farm.city ? `, ${p.farm.city}` : ''}{p.farm.country ? ` (${p.farm.country})` : p.farm.state ? ` (${p.farm.state})` : ''}</>
                 )}
               </div>
               {p.farm?.user && (

@@ -151,14 +151,14 @@ export function authHeaders(): HeadersInit {
 }
 
 const SAMPLE_PAYLOAD = {
-  farmerName: 'AYOOLUWA OGUNSINA',
-  farmName: 'Fishmaster Foods Ltd',
-  location: 'AKOBO',
+  farmerName: 'Sample farmer',
+  farmName: 'Sample farm',
+  location: 'Sample location',
   city: 'Ibadan',
   state: 'Oyo',
   country: 'Nigeria',
-  pondName: 'fishmaster 1',
-  pondNumber: 12,
+  pondName: 'Sample pond',
+  pondNumber: 1,
   dimensions: { lengthM: 2, widthM: 3, depthM: 1.3 },
   averageWeightAtStockingG: 8,
   fingerlingPrice: 30,

@@ -117,6 +117,12 @@ export function AppDisplayPage({
   const species = display?.stock.fishSpecies ?? 'Fish';
   const name = display?.farmName || pondName || 'Your farm';
   const farmer = display?.farmerName || 'Farmer';
+  const quantityLeft = display
+    ? Math.max(
+        0,
+        display.stock.quantityStocked - (mort[mort.length - 1]?.cumulativeMortality ?? 0),
+      )
+    : (mort[mort.length - 1]?.closingStock ?? null);
 
   const maxWeight = Math.max(...m.map((x) => x.expectedAvgWeightG), 1);
   const maxFeed = Math.max(...m.map((x) => x.monthlyFeedKg), 1);
@@ -138,17 +144,24 @@ export function AppDisplayPage({
         </div>
 
         <div className="ig-profile-stats" style={statRow}>
-          <Stat n={display ? display.stock.quantityStocked.toLocaleString() : '—'} label="stocked" />
-          <Stat n={mort[mort.length - 1] ? String(mort[mort.length - 1]!.closingStock) : '—'} label="left" />
-          <Stat n={lastMonth ? `${lastMonth.expectedAvgWeightG.toFixed(0)}g` : '—'} label="m6 weight" />
-          <Stat n={display ? `${(display.pond.volumeLiters / 1000).toFixed(1)}m³` : '—'} label="pond" />
+          <Stat n={display ? display.stock.quantityStocked.toLocaleString() : '—'} label="fish stocked" />
+          <Stat n={quantityLeft != null ? quantityLeft.toLocaleString() : '—'} label="fish quantity left" />
+          <Stat n={lastMonth ? `${lastMonth.expectedAvgWeightG.toFixed(0)} g` : '—'} label="month 6 weight" />
+          <Stat
+            n={display ? `${display.pond.volumeLiters.toLocaleString(undefined, { maximumFractionDigits: 0 })} litres` : '—'}
+            label="pond volume"
+          />
         </div>
 
         <div className="ig-profile-bio">
         <p style={{ margin: '10px 0 0', fontSize: '0.86rem', lineHeight: 1.45 }}>
           <strong>{species}</strong>
-          <span style={{ color: '#737373' }}> · {locationLine}</span>
         </p>
+        {locationLine ? (
+          <p style={{ margin: '4px 0 0', fontSize: '0.86rem', lineHeight: 1.45, color: '#737373' }}>
+            {locationLine}
+          </p>
+        ) : null}
         {display?.categories.length ? (
           <p style={{ margin: '6px 0 0', fontSize: '0.8rem', color: '#0d4f6e' }}>
             {display.categories.map(memberCategoryLabel).join(' · ')}
@@ -175,7 +188,7 @@ export function AppDisplayPage({
         )}
       </header>
 
-      <div style={stories}>
+      <div style={stories} className="swipe-rail">
         {onLog && (
           <button type="button" className="ig-desktop-hide" onClick={onLog} style={storyBtn}>
             <span style={{ ...storyRing, boxShadow: '0 0 0 2px #fff, 0 0 0 3px #f59e0b' }}>
@@ -185,14 +198,15 @@ export function AppDisplayPage({
           </button>
         )}
         {m.map((x, i) => (
-          <button key={x.month} type="button" onClick={() => jumpMonth(i)} style={storyBtn}>
+          <button key={x.month} type="button" onClick={() => jumpMonth(i)} style={storyBtn} aria-label={`Month ${x.month}, feed size ${x.feedSizeMm}`}>
             <span style={{ ...storyRing, boxShadow: feedMonth === i && tab === 'feed' ? '0 0 0 2px #fff, 0 0 0 4px #0d4f6e' : '0 0 0 2px #fff, 0 0 0 3px #dbdbdb' }}>
-              <span style={storyInner}>M{x.month}</span>
+              <span style={storyInner}>{x.month}</span>
             </span>
-            <span style={storyLabel}>{x.feedSizeMm}</span>
+            <span style={storyLabel}>Month {x.month}</span>
           </button>
         ))}
       </div>
+      <p className="swipe-hint">Swipe for months</p>
 
       <div style={tabs} role="tablist">
         <TabButton active={tab === 'feed'} label="Feed" onClick={() => setTab('feed')} />
@@ -208,7 +222,7 @@ export function AppDisplayPage({
             caption={
               todayRow
                 ? `Morning ${todayRow.morningFeedG.toFixed(0)} g · Evening ${todayRow.eveningFeedG.toFixed(0)} g · day ${todayRow.dayInCycle}`
-                : `${species} · ${display ? fmtDate(display.stock.stockingDate) : 'stocked'} · swipe the days`
+                : `${species} · ${display ? fmtDate(display.stock.stockingDate) : 'stocked'} · swipe for daily rations`
             }
           >
             <div className="ig-hero" style={hero}>
@@ -216,15 +230,15 @@ export function AppDisplayPage({
                 {display?.pond.name ?? pondName ?? 'Pond'} · twice daily
               </div>
               <div className="ig-hero-value" style={{ fontSize: '2.4rem', fontWeight: 700, letterSpacing: '-0.04em', marginTop: 8 }}>
-                {todayRow ? `${todayRow.morningFeedG.toFixed(0)}g` : `${nowMonth?.monthlyFeedKg.toFixed(0) ?? '—'} kg`}
+                {todayRow ? `${todayRow.morningFeedG.toFixed(0)} g` : `${nowMonth?.monthlyFeedKg.toFixed(0) ?? '—'} kg`}
               </div>
               <div style={{ opacity: 0.9, marginTop: 4 }}>
-                {todayRow ? '8:30am ration' : 'this month’s feed'}
+                {todayRow ? 'Morning ration' : 'This month’s feed'}
               </div>
               <div style={{ display: 'flex', gap: 16, marginTop: 18 }}>
-                <Mini label="PM" value={todayRow ? `${todayRow.eveningFeedG.toFixed(0)}g` : '5:30pm'} />
-                <Mini label="fish" value={todayRow ? String(todayRow.presentQuantity) : String(display?.stock.quantityStocked ?? '—')} />
-                <Mini label="size" value={nowMonth?.feedSizeMm ?? '—'} />
+                <Mini label="Evening feed" value={todayRow ? `${todayRow.eveningFeedG.toFixed(0)} g` : '—'} />
+                <Mini label="Fish quantity" value={todayRow ? String(todayRow.presentQuantity) : String(quantityLeft ?? display?.stock.quantityStocked ?? '—')} />
+                <Mini label="Feed size" value={nowMonth?.feedSizeMm ?? '—'} />
               </div>
             </div>
           </Post>
@@ -233,8 +247,9 @@ export function AppDisplayPage({
             <div style={postMeta}>
               <strong>Daily ration</strong>
               <span style={{ color: '#737373' }}> · month {feedMonth + 1}</span>
+              <span className="swipe-hint-inline"> · swipe</span>
             </div>
-            <div className="ig-day-rail" style={dayRail}>
+            <div className="ig-day-rail swipe-rail" style={dayRail}>
               {chart.map((r) => {
                 const isToday = sameDay(new Date(r.date), new Date());
                 return (
@@ -268,7 +283,7 @@ export function AppDisplayPage({
                       background: x.month === nowMonth?.month ? '#0d4f6e' : '#b6d4e3',
                     }} />
                   </div>
-                  <div style={{ fontSize: '0.7rem', color: '#737373' }}>M{x.month}</div>
+                  <div style={{ fontSize: '0.7rem', color: '#737373' }}>Month {x.month}</div>
                 </div>
               ))}
             </div>
@@ -290,7 +305,7 @@ export function AppDisplayPage({
             <Post
               kicker="Month 1"
               title={`${display.stock.quantityStocked.toLocaleString()} juveniles`}
-              caption={`Stocked ${fmtDate(display.stock.stockingDate)} · ${display.stock.stockingMonth} · ${display.stock.averageWeightAtStockingG} g · ${display.pond.volumeLiters.toFixed(0)} L`}
+              caption={`Stocked ${fmtDate(display.stock.stockingDate)} · ${display.stock.stockingMonth} · ${display.stock.averageWeightAtStockingG} g · ${display.pond.volumeLiters.toLocaleString(undefined, { maximumFractionDigits: 0 })} litres`}
             >
               <div style={{ display: 'grid', gap: 8 }}>
                 <Snap label="Mid-month weight should be" value={`${midMonth1.averageWeightG.toFixed(1)} g`} />
@@ -329,9 +344,9 @@ export function AppDisplayPage({
             title={`${report.cycleFeedKg.months6.toFixed(0)} kg over 6 months`}
             caption={`${report.cycleFeedBags.months6.toFixed(1)} bags of 15 kg. Month 4 is ${report.cycleFeedKg.months4.toFixed(0)} kg · month 5 is ${report.cycleFeedKg.months5.toFixed(0)} kg.`}
           >
-            <div className="ig-bars" style={bars}>
+            <div className="ig-bars swipe-rail" style={bars}>
               {m.map((x) => (
-                <div key={x.month} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                <div key={x.month} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 36 }}>
                   <div style={{ height: 90, width: '100%', display: 'flex', alignItems: 'flex-end' }}>
                     <div style={{
                       width: '100%',
@@ -340,10 +355,11 @@ export function AppDisplayPage({
                       background: '#f59e0b',
                     }} />
                   </div>
-                  <div style={{ fontSize: '0.7rem', color: '#737373' }}>{x.monthlyFeedKg.toFixed(0)}</div>
+                  <div style={{ fontSize: '0.7rem', color: '#737373' }}>Month {x.month}</div>
                 </div>
               ))}
             </div>
+            <p className="swipe-hint">Swipe for months</p>
           </Post>
 
           <div style={{ padding: '4px 16px 24px' }}>
@@ -357,18 +373,21 @@ export function AppDisplayPage({
       )}
 
       {tab === 'grid' && (
-        <div style={grid}>
+        <div>
+          <p className="swipe-hint" style={{ padding: '0 16px' }}>Swipe months</p>
+          <div style={grid} className="swipe-rail">
           {m.map((x, i) => {
             const left = mort[i]?.closingStock;
             const wash = i % 2 === 0 ? 'linear-gradient(165deg, #0d4f6e, #155e75)' : 'linear-gradient(165deg, #115e75, #0f766e)';
             return (
               <button key={x.month} type="button" onClick={() => jumpMonth(i)} style={{ ...gridCell, background: wash }}>
-                <span style={{ fontSize: '0.68rem', letterSpacing: '0.06em', textTransform: 'uppercase', opacity: 0.85 }}>M{x.month}</span>
-                <span style={{ fontSize: '1.2rem', fontWeight: 700 }}>{x.expectedAvgWeightG.toFixed(0)}g</span>
-                <span style={{ fontSize: '0.68rem', opacity: 0.9 }}>{left ?? '—'} left</span>
+                <span style={{ fontSize: '0.68rem', letterSpacing: '0.06em', textTransform: 'uppercase', opacity: 0.85 }}>Month {x.month}</span>
+                <span style={{ fontSize: '1.2rem', fontWeight: 700 }}>{x.expectedAvgWeightG.toFixed(0)} g</span>
+                <span style={{ fontSize: '0.68rem', opacity: 0.9 }}>{left ?? '—'} fish left</span>
               </button>
             );
           })}
+          </div>
         </div>
       )}
 
@@ -381,7 +400,10 @@ export function AppDisplayPage({
                 ['Gender', display.gender ?? '—'],
                 ['Phone', display.phone ?? '—'],
                 ['Email', display.email ?? '—'],
-                ['Location', locationLine],
+                ['Farm address', display.location || '—'],
+                ['City', display.city || '—'],
+                ['State', display.state || '—'],
+                ['Country', display.country || '—'],
               ]} />
             ) : <p style={muted}>Sample data — register to see your profile.</p>}
           </Accordion>
@@ -389,14 +411,15 @@ export function AppDisplayPage({
             {display ? (
               <Rows rows={[
                 ['Pond', `${display.pond.name} (#${display.pond.number})`],
-                ['Size', `${display.pond.lengthM} × ${display.pond.widthM} × ${display.pond.depthM} m`],
-                ['Volume', `${display.pond.volumeLiters.toFixed(0)} L`],
+                ['Pond size', `${display.pond.lengthM} × ${display.pond.widthM} × ${display.pond.depthM} m`],
+                ['Pond volume', `${display.pond.volumeLiters.toLocaleString(undefined, { maximumFractionDigits: 0 })} litres`],
                 ['Species', display.stock.fishSpecies ?? '—'],
-                ['Stocked', display.stock.quantityStocked],
-                ['Weight @ stock', `${display.stock.averageWeightAtStockingG} g`],
-                ['Fingerling', display.stock.fingerlingPrice],
+                ['Fish quantity stocked', display.stock.quantityStocked],
+                ['Fish quantity left', quantityLeft ?? '—'],
+                ['Weight at stocking', `${display.stock.averageWeightAtStockingG} g`],
+                ['Fingerling price', display.stock.fingerlingPrice],
                 ['Output (tonnes) / year', display.estimatedFishOutputYear ?? '—'],
-                ['Stocked', fmtDate(display.stock.stockingDate)],
+                ['Stocking date', fmtDate(display.stock.stockingDate)],
                 ['First feed', fmtDate(display.stock.firstFeedingDate)],
                 ['Protein', `${display.stock.desiredCrudeProteinPct}%`],
                 ['Desired feed', `${display.stock.desiredFeedQuantityKg} kg`],
@@ -415,10 +438,10 @@ export function AppDisplayPage({
             <Rows rows={m.flatMap((x, i) => {
               const cumFish = m.slice(0, i + 1).reduce((sum, row) => sum + row.expectedTotalWeightKg, 0);
               return [
-                [`M${x.month} avg weight`, `${x.expectedAvgWeightG.toFixed(1)} g`],
-                [`M${x.month} total weight`, `${x.expectedTotalWeightKg.toFixed(1)} kg`],
-                [`M${x.month} feed`, `${x.monthlyFeedKg.toFixed(1)} kg · ${x.monthlyFeedBags.toFixed(1)} bags`],
-                [`M${x.month} cumulative`, `${x.cumulativeFeedKg.toFixed(1)} kg feed · ${cumFish.toFixed(1)} kg fish`],
+                [`Month ${x.month} average weight`, `${x.expectedAvgWeightG.toFixed(1)} g`],
+                [`Month ${x.month} total weight`, `${x.expectedTotalWeightKg.toFixed(1)} kg`],
+                [`Month ${x.month} feed`, `${x.monthlyFeedKg.toFixed(1)} kg · ${x.monthlyFeedBags.toFixed(1)} bags`],
+                [`Month ${x.month} cumulative`, `${x.cumulativeFeedKg.toFixed(1)} kg feed · ${cumFish.toFixed(1)} kg fish`],
               ] as [string, string][];
             })} />
           </Accordion>
@@ -431,8 +454,8 @@ export function AppDisplayPage({
           </Accordion>
           <Accordion id="mort" title="Mortality & stock left" open={openSection} setOpen={setOpenSection}>
             <Rows rows={mort.flatMap((x) => [
-              [`M${x.month} opening → close`, `${x.openingStock} → ${x.closingStock}`],
-              [`M${x.month} mortality`, `${x.monthlyMortality} (${x.mortalityPct.toFixed(1)}%) · cum ${x.cumulativeMortality}`],
+              [`Month ${x.month} opening → close`, `${x.openingStock} → ${x.closingStock}`],
+              [`Month ${x.month} mortality`, `${x.monthlyMortality} (${x.mortalityPct.toFixed(1)}%) · cumulative ${x.cumulativeMortality}`],
             ])} />
           </Accordion>
         </div>
@@ -633,24 +656,26 @@ const dayCard: React.CSSProperties = {
 };
 
 const grid: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '1fr 1fr 1fr',
-  gap: 2,
-  background: '#fff',
+  display: 'flex',
+  gap: 8,
+  overflowX: 'auto',
+  padding: '8px 16px 20px',
+  WebkitOverflowScrolling: 'touch',
 };
 
 const gridCell: React.CSSProperties = {
+  flex: '0 0 140px',
   border: 'none',
-  cursor: 'pointer',
-  aspectRatio: '1',
-  minHeight: 120,
-  padding: 10,
-  textAlign: 'left',
+  borderRadius: 14,
+  padding: '14px 12px',
   color: '#fff',
+  textAlign: 'left',
+  cursor: 'pointer',
   display: 'flex',
   flexDirection: 'column',
   justifyContent: 'flex-end',
   gap: 3,
+  minHeight: 110,
 };
 
 const pondSelect: React.CSSProperties = {

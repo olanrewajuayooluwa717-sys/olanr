@@ -226,6 +226,25 @@ textarea {
   scroll-snap-align: start;
 }
 
+.swipe-rail {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.swipe-hint {
+  margin: 0 16px 8px;
+  font-size: 0.72rem;
+  color: #a3a3a3;
+  letter-spacing: 0.02em;
+}
+
+.swipe-hint-inline {
+  font-size: 0.72rem;
+  color: #a3a3a3;
+  font-weight: 500;
+}
+
 .ig-pic-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

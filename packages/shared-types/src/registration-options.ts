@@ -140,6 +140,38 @@ export function currencySymbol(code: string): string {
   return CURRENCY_OPTIONS.find((c) => c.code === code)?.symbol ?? code;
 }
 
+/** Guess settlement/display currency from a free-text country name. */
+export function currencyFromCountry(country: string | null | undefined): string {
+  if (!country) return 'NGN';
+  const c = country.trim().toLowerCase();
+  if (c === 'ng' || c.includes('nigeria')) return 'NGN';
+  if (c === 'gb' || c === 'uk' || c.includes('united kingdom') || c.includes('britain') || c.includes('england') || c.includes('scotland') || c.includes('wales')) {
+    return 'GBP';
+  }
+  if (c === 'us' || c.includes('united states') || c === 'usa' || c.includes('america')) return 'USD';
+  if (c === 'gh' || c.includes('ghana')) return 'GHS';
+  if (c === 'ke' || c.includes('kenya')) return 'KES';
+  if (c === 'za' || c.includes('south africa')) return 'ZAR';
+  if (c === 'eu' || c.includes('ireland') || c.includes('france') || c.includes('germany') || c.includes('netherlands') || c.includes('spain') || c.includes('italy')) {
+    return 'EUR';
+  }
+  return 'NGN';
+}
+
+export function formatMoney(amount: number, currencyCode: string): string {
+  const code = (currencyCode || 'NGN').toUpperCase();
+  const symbol = currencySymbol(code);
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: code,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  } catch {
+    return `${symbol}${amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  }
+}
+
 export function clampRegistrationNumber(
   value: number,
   range: { min: number; max: number },
