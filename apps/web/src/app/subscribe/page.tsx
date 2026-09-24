@@ -13,6 +13,61 @@ type PlansResponse = {
   stripeConfigured?: boolean;
 };
 
+type MembershipInfo = {
+  headline: string;
+  detail: string | null;
+  status: string;
+};
+
+function formatMembership(data: {
+  status?: string;
+  tier?: string;
+  plan?: { label?: string } | null;
+  daysRemaining?: number | null;
+  currentPeriodEnd?: string | null;
+  cancelAtPeriodEnd?: boolean;
+}): MembershipInfo | null {
+  if (!data.status) return null;
+  const planLabel = data.plan?.label ?? data.tier ?? 'plan';
+  const active = data.status === 'active';
+  const headline = active
+    ? `Active · ${planLabel}`
+    : `${data.status} · ${planLabel}`;
+
+  let detail: string | null = null;
+  if (typeof data.daysRemaining === 'number') {
+    const days = data.daysRemaining;
+    const dayWord = days === 1 ? 'day' : 'days';
+    if (data.cancelAtPeriodEnd) {
+      detail =
+        days === 0
+          ? 'Subscription ends today (will not renew).'
+          : `${days} ${dayWord} to subscription expiration (will not renew).`;
+    } else if (active) {
+      detail =
+        days === 0
+          ? 'Renews today.'
+          : `${days} ${dayWord} to next renewal.`;
+    } else {
+      detail =
+        days === 0
+          ? 'Access ends today.'
+          : `${days} ${dayWord} to subscription expiration.`;
+    }
+  } else if (data.currentPeriodEnd) {
+    const when = new Date(data.currentPeriodEnd).toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+    detail = data.cancelAtPeriodEnd
+      ? `Ends on ${when} (will not renew).`
+      : `Current period ends ${when}.`;
+  }
+
+  return { headline, detail, status: data.status };
+}
+
 export default function SubscribePage() {
   const router = useRouter();
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -21,7 +76,7 @@ export default function SubscribePage() {
   const [cancelled, setCancelled] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
-  const [membership, setMembership] = useState<string | null>(null);
+  const [membership, setMembership] = useState<MembershipInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refreshMembership = async () => {
@@ -29,18 +84,13 @@ export default function SubscribePage() {
     setError(null);
     try {
       const data = await apiFetch('/api/billing/sync', { method: 'POST' });
-      if (data.status === 'active') {
-        setMembership(`Active · ${data.plan?.label ?? data.tier}`);
-      } else if (data.synced) {
-        setMembership(`${data.status} · ${data.plan?.label ?? data.tier}`);
-      } else {
-        const status = await apiFetch('/api/billing/status');
-        setMembership(
-          status.status === 'active'
-            ? `Active · ${status.plan?.label ?? status.tier}`
-            : `Status: ${status.status}`,
-        );
+      const fromSync = formatMembership(data);
+      if (fromSync && (data.status === 'active' || data.synced)) {
+        setMembership(fromSync);
+        return;
       }
+      const status = await apiFetch('/api/billing/status');
+      setMembership(formatMembership(status));
     } catch (e) {
       setError(String(e).replace(/^Error:\s*/, ''));
     } finally {
@@ -98,7 +148,24 @@ export default function SubscribePage() {
         <Flash tone="warn">Card payments are being connected. You can still browse plans; Subscribe will unlock once Stripe is live on the API.</Flash>
       )}
       {membership && (
-        <Flash tone="ok">{membership}</Flash>
+        <div
+          style={{
+            margin: '0 0 1rem',
+            padding: '0.85rem 1rem',
+            borderRadius: 10,
+            background: membership.status === 'active' ? '#ecfdf5' : '#fff7ed',
+            border: `1px solid ${membership.status === 'active' ? '#a7f3d0' : '#fed7aa'}`,
+            color: membership.status === 'active' ? '#065f46' : '#9a3412',
+          }}
+        >
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', opacity: 0.85 }}>
+            Member status
+          </div>
+          <div style={{ fontWeight: 700, marginTop: 4 }}>{membership.headline}</div>
+          {membership.detail ? (
+            <div style={{ marginTop: 4, fontSize: '0.9rem', lineHeight: 1.4 }}>{membership.detail}</div>
+          ) : null}
+        </div>
       )}
       {presentment && (
         <p style={{ color: '#64748b', fontSize: '0.85rem', margin: '0 0 1rem' }}>{presentment}</p>

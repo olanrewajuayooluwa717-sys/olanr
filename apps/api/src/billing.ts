@@ -33,12 +33,20 @@ async function syncSubscriptionFromStripe(userId: string): Promise<{
   tier: SubscriptionTier;
   status: string;
   synced: boolean;
+  currentPeriodEnd: string | null;
+  daysRemaining: number | null;
+  cancelAtPeriodEnd: boolean;
 }> {
+  const emptyPeriod = {
+    currentPeriodEnd: null as string | null,
+    daysRemaining: null as number | null,
+    cancelAtPeriodEnd: false,
+  };
   const stripe = getStripe();
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new Error('User not found');
   if (!stripe) {
-    return { tier: user.subscriptionTier, status: user.subscriptionStatus, synced: false };
+    return { tier: user.subscriptionTier, status: user.subscriptionStatus, synced: false, ...emptyPeriod };
   }
 
   let customerId = user.stripeCustomerId;
@@ -57,7 +65,7 @@ async function syncSubscriptionFromStripe(userId: string): Promise<{
   }
 
   if (!customerId) {
-    return { tier: user.subscriptionTier, status: user.subscriptionStatus, synced: false };
+    return { tier: user.subscriptionTier, status: user.subscriptionStatus, synced: false, ...emptyPeriod };
   }
 
   const subs = await stripe.subscriptions.list({
@@ -70,7 +78,7 @@ async function syncSubscriptionFromStripe(userId: string): Promise<{
     subs.data.find((s) => s.status === 'past_due');
 
   if (!active) {
-    return { tier: user.subscriptionTier, status: user.subscriptionStatus, synced: false };
+    return { tier: user.subscriptionTier, status: user.subscriptionStatus, synced: false, ...emptyPeriod };
   }
 
   const tierFromMeta = active.metadata?.tier as SubscriptionTier | undefined;
@@ -95,10 +103,20 @@ async function syncSubscriptionFromStripe(userId: string): Promise<{
     },
   });
 
+  const periodEndMs = (active.current_period_end ?? 0) * 1000;
+  const currentPeriodEnd = periodEndMs > 0 ? new Date(periodEndMs).toISOString() : null;
+  const daysRemaining =
+    periodEndMs > 0
+      ? Math.max(0, Math.ceil((periodEndMs - Date.now()) / 86_400_000))
+      : null;
+
   return {
     tier: updated.subscriptionTier,
     status: updated.subscriptionStatus,
     synced: true,
+    currentPeriodEnd,
+    daysRemaining,
+    cancelAtPeriodEnd: Boolean(active.cancel_at_period_end),
   };
 }
 
@@ -111,10 +129,21 @@ billingRouter.get('/status', requireAuth, async (req, res) => {
       return;
     }
 
-    // Self-heal when Checkout succeeded but webhooks returned 400.
-    if (user.subscriptionStatus !== 'active' && isStripeConfigured()) {
+    let period = {
+      currentPeriodEnd: null as string | null,
+      daysRemaining: null as number | null,
+      cancelAtPeriodEnd: false,
+    };
+
+    // Refresh membership + period end from Stripe when configured.
+    if (isStripeConfigured()) {
       try {
         const synced = await syncSubscriptionFromStripe(user.id);
+        period = {
+          currentPeriodEnd: synced.currentPeriodEnd,
+          daysRemaining: synced.daysRemaining,
+          cancelAtPeriodEnd: synced.cancelAtPeriodEnd,
+        };
         if (synced.synced) {
           user = await prisma.user.findUnique({ where: { id: user.id } });
         }
@@ -133,6 +162,7 @@ billingRouter.get('/status', requireAuth, async (req, res) => {
       status: user.subscriptionStatus,
       plan: PLANS[user.subscriptionTier],
       stripeConfigured: isStripeConfigured(),
+      ...period,
     });
   } catch (err) {
     console.error('[billing] status failed', err);
