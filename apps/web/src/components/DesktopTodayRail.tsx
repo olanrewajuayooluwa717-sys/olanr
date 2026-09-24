@@ -156,27 +156,35 @@ export function DesktopTodayRail() {
 
             <div className="rail-rations">
               <div>
-                <span className="rail-label">Morning</span>
-                <strong>{today.morningG != null ? `${today.morningG.toFixed(0)} g` : '—'}</strong>
+                <span className="rail-label">Chart</span>
+                <strong>
+                  {today.feedDueKg != null
+                    ? `${today.feedDueKg.toFixed(2)} kg`
+                    : today.morningG != null && today.eveningG != null
+                      ? `${((today.morningG + today.eveningG) / 1000).toFixed(2)} kg`
+                      : '—'}
+                </strong>
               </div>
               <div>
-                <span className="rail-label">Evening</span>
-                <strong>{today.eveningG != null ? `${today.eveningG.toFixed(0)} g` : '—'}</strong>
+                <span className="rail-label">Logged</span>
+                <strong>{today.fedKg != null ? `${today.fedKg.toFixed(2)} kg` : '—'}</strong>
               </div>
             </div>
 
-            {today.feedDueKg != null && (
+            {(today.morningG != null || today.eveningG != null) && (
               <p className="rail-copy">
-                {today.fedKg != null
-                  ? `Fed ${today.fedKg.toFixed(1)} / ${today.feedDueKg.toFixed(1)} kg`
-                  : `Feed due ${today.feedDueKg.toFixed(1)} kg`}
+                Morning {today.morningG != null ? `${today.morningG.toFixed(0)} g` : '—'}
+                {' · '}
+                Evening {today.eveningG != null ? `${today.eveningG.toFixed(0)} g` : '—'}
               </p>
             )}
             {today.note && <p className="rail-note">{today.note}</p>}
-            {today.activities.length > 0 && (
+            {today.activities.length > 0 ? (
               <p className="rail-copy">
-                <strong>Activities:</strong> {today.activities.join(' · ')}
+                <strong>Today’s activities:</strong> {today.activities.join(' · ')}
               </p>
+            ) : (
+              <p className="rail-copy">No activities logged today.</p>
             )}
 
             <button type="button" className="rail-primary" onClick={openPondLog}>

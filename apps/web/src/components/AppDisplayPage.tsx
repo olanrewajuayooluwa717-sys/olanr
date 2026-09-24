@@ -40,7 +40,7 @@ export type DisplayProfile = {
   };
 };
 
-type Tab = 'feed' | 'grid' | 'numbers';
+type Tab = 'today' | 'grid' | 'numbers';
 
 function fmtDate(d: string | Date) {
   const x = typeof d === 'string' ? new Date(d) : d;
@@ -67,6 +67,9 @@ export function AppDisplayPage({
   onSwitchPond,
   statusNote,
   todayActivities = [],
+  todayExpectedFeedKg = null,
+  todayActualFeedKg = null,
+  dayInCulture = null,
   onLog,
 }: {
   report: StockCycleReport;
@@ -77,9 +80,12 @@ export function AppDisplayPage({
   onSwitchPond?: (id: string) => void;
   statusNote?: string | null;
   todayActivities?: string[];
+  todayExpectedFeedKg?: number | null;
+  todayActualFeedKg?: number | null;
+  dayInCulture?: number | null;
   onLog?: () => void;
 }) {
-  const [tab, setTab] = useState<Tab>('feed');
+  const [tab, setTab] = useState<Tab>('today');
   const [sponsor, setSponsor] = useState<{ id: string; title: string; body: string; mediaUrl: string | null } | null>(null);
   const [sponsorOpen, setSponsorOpen] = useState(false);
   const [feedMonth, setFeedMonth] = useState(0);
@@ -119,6 +125,7 @@ export function AppDisplayPage({
   const species = display?.stock.fishSpecies ?? 'Fish';
   const name = display?.farmName || pondName || 'Your farm';
   const farmer = display?.farmerName || 'Farmer';
+  const pondLabel = display?.pond.name ?? pondName ?? 'Pond';
   const quantityLeft = display
     ? Math.max(
         0,
@@ -129,9 +136,18 @@ export function AppDisplayPage({
   const maxWeight = Math.max(...m.map((x) => x.expectedAvgWeightG), 1);
   const maxFeed = Math.max(...m.map((x) => x.monthlyFeedKg), 1);
 
+  const expectedKg =
+    todayExpectedFeedKg ??
+    (todayRow ? (todayRow.morningFeedG + todayRow.eveningFeedG) / 1000 : null);
+  const actualKg = todayActualFeedKg;
+  const expectedG = expectedKg != null ? expectedKg * 1000 : todayRow ? todayRow.morningFeedG + todayRow.eveningFeedG : null;
+  const actualG = actualKg != null ? actualKg * 1000 : null;
+  const feedCompareMax = Math.max(expectedG ?? 0, actualG ?? 0, 1);
+  const dayLabel = dayInCulture ?? todayRow?.dayInCycle ?? null;
+
   const jumpMonth = (i: number) => {
     setFeedMonth(i);
-    setTab('feed');
+    setTab('today');
   };
 
   return (
@@ -141,42 +157,32 @@ export function AppDisplayPage({
           <div style={avatar}>{initials(farmer)}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: '1.05rem', letterSpacing: '-0.02em' }}>{name}</div>
-            <div style={{ color: '#737373', fontSize: '0.82rem', marginTop: 2 }}>{farmer}</div>
+            <div style={{ color: '#737373', fontSize: '0.82rem', marginTop: 2 }}>
+              {pondLabel}
+              {dayLabel != null ? ` · Day ${dayLabel} in cycle` : ''}
+            </div>
           </div>
         </div>
 
         <div className="ig-profile-stats" style={statRow}>
-          <Stat n={display ? display.stock.quantityStocked.toLocaleString() : '—'} label="fish stocked" />
           <Stat n={quantityLeft != null ? quantityLeft.toLocaleString() : '—'} label="fish quantity left" />
+          <Stat n={display ? display.stock.quantityStocked.toLocaleString() : '—'} label="fish stocked" />
           <Stat n={lastMonth ? `${lastMonth.expectedAvgWeightG.toFixed(0)} g` : '—'} label="month 6 weight" />
-          <Stat
-            n={display ? `${display.pond.volumeLiters.toLocaleString(undefined, { maximumFractionDigits: 0 })} litres` : '—'}
-            label="pond volume"
-          />
         </div>
 
         <div className="ig-profile-bio">
-        <p style={{ margin: '10px 0 0', fontSize: '0.86rem', lineHeight: 1.45 }}>
-          <strong>{species}</strong>
-        </p>
-        {locationLine ? (
-          <p style={{ margin: '4px 0 0', fontSize: '0.86rem', lineHeight: 1.45, color: '#737373' }}>
-            {locationLine}
+          <p style={{ margin: '10px 0 0', fontSize: '0.86rem', lineHeight: 1.45 }}>
+            <strong>{species}</strong>
+            {farmer !== 'Farmer' ? <span style={{ color: '#737373' }}> · {farmer}</span> : null}
           </p>
-        ) : null}
-        {display?.categories.length ? (
-          <p style={{ margin: '6px 0 0', fontSize: '0.8rem', color: '#0d4f6e' }}>
-            {display.categories.map(memberCategoryLabel).join(' · ')}
-          </p>
-        ) : null}
-        {statusNote ? (
-          <p style={{ margin: '10px 0 0', fontSize: '0.84rem', color: '#0d4f6e', fontWeight: 600 }}>{statusNote}</p>
-        ) : null}
-        {todayActivities.length > 0 ? (
-          <p style={{ margin: '8px 0 0', fontSize: '0.82rem', color: '#475569', lineHeight: 1.45 }}>
-            <strong style={{ color: '#0d4f6e' }}>Today’s activities:</strong> {todayActivities.join(' · ')}
-          </p>
-        ) : null}
+          {locationLine ? (
+            <p style={{ margin: '4px 0 0', fontSize: '0.86rem', lineHeight: 1.45, color: '#737373' }}>
+              {locationLine}
+            </p>
+          ) : null}
+          {statusNote ? (
+            <p style={{ margin: '8px 0 0', fontSize: '0.84rem', color: '#0d4f6e', fontWeight: 600 }}>{statusNote}</p>
+          ) : null}
         </div>
 
         {ponds.length > 1 && cycleId && onSwitchPond && (
@@ -195,6 +201,78 @@ export function AppDisplayPage({
         )}
       </header>
 
+      {/* Today-first hero: ration + activities + Daily log */}
+      <section style={{ padding: '0 16px 12px' }}>
+        <div className="ig-hero" style={{ ...hero, borderRadius: 16 }}>
+          <div style={{ fontSize: '0.75rem', letterSpacing: '0.08em', textTransform: 'uppercase', opacity: 0.85 }}>
+            Today’s feed
+          </div>
+          <div className="ig-hero-value" style={{ fontSize: '2.1rem', fontWeight: 700, letterSpacing: '-0.04em', marginTop: 8 }}>
+            {expectedKg != null ? `${expectedKg.toFixed(2)} kg` : '—'}
+          </div>
+          <div style={{ opacity: 0.9, marginTop: 4 }}>
+            Chart amount
+            {todayRow
+              ? ` · morning ${todayRow.morningFeedG.toFixed(0)} g · evening ${todayRow.eveningFeedG.toFixed(0)} g`
+              : ''}
+          </div>
+          {(expectedG != null || actualG != null) && (
+            <div style={{ marginTop: 14, display: 'grid', gap: 8 }}>
+              <FeedBar label="Chart" grams={expectedG} max={feedCompareMax} tone="#bae6fd" />
+              <FeedBar label="Logged" grams={actualG} max={feedCompareMax} tone="#fbbf24" empty="Not logged yet" />
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 16, marginTop: 16 }}>
+            <Mini label="Feed size" value={nowMonth?.feedSizeMm ?? '—'} />
+            <Mini label="Fish left" value={quantityLeft != null ? quantityLeft.toLocaleString() : '—'} />
+            <Mini
+              label="Logged"
+              value={actualKg != null ? `${actualKg.toFixed(2)} kg` : '—'}
+            />
+          </div>
+        </div>
+
+        <div style={{ marginTop: 12, padding: '12px 14px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+          <div style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#0d4f6e' }}>
+            Today’s activities
+          </div>
+          {todayActivities.length > 0 ? (
+            <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: '0.88rem', lineHeight: 1.5, color: '#334155' }}>
+              {todayActivities.map((a) => (
+                <li key={a}>{a}</li>
+              ))}
+            </ul>
+          ) : (
+            <p style={{ margin: '8px 0 0', fontSize: '0.86rem', color: '#64748b' }}>
+              Nothing logged for today yet.
+            </p>
+          )}
+        </div>
+
+        {onLog && (
+          <button
+            type="button"
+            onClick={onLog}
+            className="ig-desktop-hide"
+            style={{
+              display: 'block',
+              width: '100%',
+              marginTop: 12,
+              padding: '14px 16px',
+              borderRadius: 12,
+              border: 'none',
+              background: '#0d4f6e',
+              color: '#fff',
+              fontWeight: 700,
+              fontSize: '1rem',
+              cursor: 'pointer',
+            }}
+          >
+            Daily log
+          </button>
+        )}
+      </section>
+
       <div style={stories} className="swipe-rail">
         {onLog && (
           <button type="button" className="ig-desktop-hide" onClick={onLog} style={storyBtn}>
@@ -206,50 +284,23 @@ export function AppDisplayPage({
         )}
         {m.map((x, i) => (
           <button key={x.month} type="button" onClick={() => jumpMonth(i)} style={storyBtn} aria-label={`Month ${x.month}, feed size ${x.feedSizeMm}`}>
-            <span style={{ ...storyRing, boxShadow: feedMonth === i && tab === 'feed' ? '0 0 0 2px #fff, 0 0 0 4px #0d4f6e' : '0 0 0 2px #fff, 0 0 0 3px #dbdbdb' }}>
+            <span style={{ ...storyRing, boxShadow: feedMonth === i && tab === 'today' ? '0 0 0 2px #fff, 0 0 0 4px #0d4f6e' : '0 0 0 2px #fff, 0 0 0 3px #dbdbdb' }}>
               <span style={storyInner}>{x.month}</span>
             </span>
             <span style={storyLabel}>Month {x.month}</span>
           </button>
         ))}
       </div>
-      <p className="swipe-hint">Swipe for months</p>
+      <p className="swipe-hint">Swipe for months · open Numbers for full reports</p>
 
       <div style={tabs} role="tablist">
-        <TabButton active={tab === 'feed'} label="Feed" onClick={() => setTab('feed')} />
+        <TabButton active={tab === 'today'} label="Today" onClick={() => setTab('today')} />
         <TabButton active={tab === 'grid'} label="Months" onClick={() => setTab('grid')} />
         <TabButton active={tab === 'numbers'} label="Numbers" onClick={() => setTab('numbers')} />
       </div>
 
-      {tab === 'feed' && (
+      {tab === 'today' && (
         <div>
-          <Post
-            kicker={`Month ${nowMonth?.month ?? feedMonth + 1}`}
-            title={todayRow ? `Today’s gift · ${todayRow.feedGiftG.toFixed(0)} g` : `Feed size ${nowMonth?.feedSizeMm ?? '—'}`}
-            caption={
-              todayRow
-                ? `Morning ${todayRow.morningFeedG.toFixed(0)} g · Evening ${todayRow.eveningFeedG.toFixed(0)} g · day ${todayRow.dayInCycle}`
-                : `${species} · ${display ? fmtDate(display.stock.stockingDate) : 'stocked'} · swipe for daily rations`
-            }
-          >
-            <div className="ig-hero" style={hero}>
-              <div style={{ fontSize: '0.75rem', letterSpacing: '0.08em', textTransform: 'uppercase', opacity: 0.85 }}>
-                {display?.pond.name ?? pondName ?? 'Pond'} · twice daily
-              </div>
-              <div className="ig-hero-value" style={{ fontSize: '2.4rem', fontWeight: 700, letterSpacing: '-0.04em', marginTop: 8 }}>
-                {todayRow ? `${todayRow.morningFeedG.toFixed(0)} g` : `${nowMonth?.monthlyFeedKg.toFixed(0) ?? '—'} kg`}
-              </div>
-              <div style={{ opacity: 0.9, marginTop: 4 }}>
-                {todayRow ? 'Morning ration' : 'This month’s feed'}
-              </div>
-              <div style={{ display: 'flex', gap: 16, marginTop: 18 }}>
-                <Mini label="Evening feed" value={todayRow ? `${todayRow.eveningFeedG.toFixed(0)} g` : '—'} />
-                <Mini label="Fish quantity" value={todayRow ? String(todayRow.presentQuantity) : String(quantityLeft ?? display?.stock.quantityStocked ?? '—')} />
-                <Mini label="Feed size" value={nowMonth?.feedSizeMm ?? '—'} />
-              </div>
-            </div>
-          </Post>
-
           <section style={{ padding: '4px 0 8px' }}>
             <div style={postMeta}>
               <strong>Daily ration</strong>
@@ -272,6 +323,36 @@ export function AppDisplayPage({
               })}
             </div>
           </section>
+
+          <div style={{ padding: '4px 16px 24px' }}>
+            <ContentTabs />
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingTop: 16 }}>
+              <Link href="/reports" style={chip}>Reports</Link>
+              <Link href="/marketplace" style={chip}>Market</Link>
+              <button type="button" onClick={() => setTab('numbers')} style={{ ...chip, border: 'none', cursor: 'pointer', font: 'inherit' }}>
+                Numbers
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'grid' && (
+        <div>
+          <p className="swipe-hint" style={{ padding: '0 16px' }}>Swipe months</p>
+          <div style={grid} className="swipe-rail">
+          {m.map((x, i) => {
+            const left = mort[i]?.closingStock;
+            const wash = i % 2 === 0 ? 'linear-gradient(165deg, #0d4f6e, #155e75)' : 'linear-gradient(165deg, #115e75, #0f766e)';
+            return (
+              <button key={x.month} type="button" onClick={() => jumpMonth(i)} style={{ ...gridCell, background: wash }}>
+                <span style={{ fontSize: '0.68rem', letterSpacing: '0.06em', textTransform: 'uppercase', opacity: 0.85 }}>Month {x.month}</span>
+                <span style={{ fontSize: '1.2rem', fontWeight: 700 }}>{x.expectedAvgWeightG.toFixed(0)} g</span>
+                <span style={{ fontSize: '0.68rem', opacity: 0.9 }}>{left ?? '—'} fish left</span>
+              </button>
+            );
+          })}
+          </div>
 
           <Post
             kicker="Growth"
@@ -324,28 +405,6 @@ export function AppDisplayPage({
             </Post>
           )}
 
-          {sponsor && (
-            <div style={sponsorCard}>
-              <button type="button" onClick={() => setSponsorOpen((v) => !v)} style={{ display: 'block', width: '100%', padding: 0, border: 'none', background: 'transparent', textAlign: 'left', cursor: 'pointer', color: 'inherit' }}>
-                <span style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#0d4f6e' }}>Sponsored</span>
-                <span style={{ display: 'block', fontWeight: 700, marginTop: 4 }}>{sponsor.title}</span>
-                {!sponsor.mediaUrl && (
-                  <span style={{ display: 'block', marginTop: 4, color: '#525252', fontSize: '0.86rem' }}>{sponsor.body.replace(/\s+/g, ' ').slice(0, 110)}</span>
-                )}
-              </button>
-              {sponsor.mediaUrl && isVideoMedia(sponsor.mediaUrl) && (
-                <video src={mediaSrc(sponsor.mediaUrl)} controls playsInline style={{ width: '100%', maxHeight: 240, marginTop: 8, background: '#000', borderRadius: 10 }} />
-              )}
-              {sponsor.mediaUrl && !isVideoMedia(sponsor.mediaUrl) && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={mediaSrc(sponsor.mediaUrl)} alt="" style={{ width: '100%', maxHeight: 240, objectFit: 'cover', borderRadius: 10, marginTop: 8 }} />
-              )}
-              {sponsorOpen && sponsor.body.trim() && sponsor.body.trim() !== sponsor.title.trim() && (
-                <p style={{ margin: '8px 0 0', fontSize: '0.9rem', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{sponsor.body}</p>
-              )}
-            </div>
-          )}
-
           <Post
             kicker="Cycle feed"
             title={`${report.cycleFeedKg.months6.toFixed(0)} kg over 6 months`}
@@ -369,32 +428,27 @@ export function AppDisplayPage({
             <p className="swipe-hint">Swipe for months</p>
           </Post>
 
-          <div style={{ padding: '4px 16px 24px' }}>
-            <ContentTabs />
-            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingTop: 16 }}>
-              <Link href="/reports" style={chip}>Reports</Link>
-              <Link href="/marketplace" style={chip}>Market</Link>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {tab === 'grid' && (
-        <div>
-          <p className="swipe-hint" style={{ padding: '0 16px' }}>Swipe months</p>
-          <div style={grid} className="swipe-rail">
-          {m.map((x, i) => {
-            const left = mort[i]?.closingStock;
-            const wash = i % 2 === 0 ? 'linear-gradient(165deg, #0d4f6e, #155e75)' : 'linear-gradient(165deg, #115e75, #0f766e)';
-            return (
-              <button key={x.month} type="button" onClick={() => jumpMonth(i)} style={{ ...gridCell, background: wash }}>
-                <span style={{ fontSize: '0.68rem', letterSpacing: '0.06em', textTransform: 'uppercase', opacity: 0.85 }}>Month {x.month}</span>
-                <span style={{ fontSize: '1.2rem', fontWeight: 700 }}>{x.expectedAvgWeightG.toFixed(0)} g</span>
-                <span style={{ fontSize: '0.68rem', opacity: 0.9 }}>{left ?? '—'} fish left</span>
+          {sponsor && (
+            <div style={sponsorCard}>
+              <button type="button" onClick={() => setSponsorOpen((v) => !v)} style={{ display: 'block', width: '100%', padding: 0, border: 'none', background: 'transparent', textAlign: 'left', cursor: 'pointer', color: 'inherit' }}>
+                <span style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#0d4f6e' }}>Sponsored</span>
+                <span style={{ display: 'block', fontWeight: 700, marginTop: 4 }}>{sponsor.title}</span>
+                {!sponsor.mediaUrl && (
+                  <span style={{ display: 'block', marginTop: 4, color: '#525252', fontSize: '0.86rem' }}>{sponsor.body.replace(/\s+/g, ' ').slice(0, 110)}</span>
+                )}
               </button>
-            );
-          })}
-          </div>
+              {sponsor.mediaUrl && isVideoMedia(sponsor.mediaUrl) && (
+                <video src={mediaSrc(sponsor.mediaUrl)} controls playsInline style={{ width: '100%', maxHeight: 240, marginTop: 8, background: '#000', borderRadius: 10 }} />
+              )}
+              {sponsor.mediaUrl && !isVideoMedia(sponsor.mediaUrl) && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={mediaSrc(sponsor.mediaUrl)} alt="" style={{ width: '100%', maxHeight: 240, objectFit: 'cover', borderRadius: 10, marginTop: 8 }} />
+              )}
+              {sponsorOpen && sponsor.body.trim() && sponsor.body.trim() !== sponsor.title.trim() && (
+                <p style={{ margin: '8px 0 0', fontSize: '0.9rem', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{sponsor.body}</p>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -407,6 +461,7 @@ export function AppDisplayPage({
                 ['Gender', display.gender ?? '—'],
                 ['Phone', display.phone ?? '—'],
                 ['Email', display.email ?? '—'],
+                ['Categories', display.categories.length ? display.categories.map(memberCategoryLabel).join(' · ') : '—'],
                 ['Farm address', display.location || '—'],
                 ['City', display.city || '—'],
                 ['State', display.state || '—'],
@@ -527,6 +582,36 @@ function Mini({ label, value }: { label: string; value: string }) {
     <div>
       <div style={{ fontSize: '1.05rem', fontWeight: 700 }}>{value}</div>
       <div style={{ fontSize: '0.72rem', opacity: 0.8 }}>{label}</div>
+    </div>
+  );
+}
+
+function FeedBar({
+  label,
+  grams,
+  max,
+  tone,
+  empty,
+}: {
+  label: string;
+  grams: number | null;
+  max: number;
+  tone: string;
+  empty?: string;
+}) {
+  const has = grams != null && grams >= 0;
+  const pct = has ? Math.max(4, Math.min(100, (grams / max) * 100)) : 0;
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: 4 }}>
+        <span style={{ opacity: 0.9 }}>{label}</span>
+        <span style={{ fontWeight: 600 }}>
+          {has ? `${(grams / 1000).toFixed(2)} kg` : (empty ?? '—')}
+        </span>
+      </div>
+      <div style={{ height: 8, borderRadius: 999, background: 'rgba(255,255,255,0.25)', overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: tone, borderRadius: 999 }} />
+      </div>
     </div>
   );
 }

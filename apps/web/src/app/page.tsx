@@ -29,6 +29,9 @@ export default function HomePage() {
   const [flash, setFlash] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(null);
   const [statusNote, setStatusNote] = useState<string | null>(null);
   const [todayActivities, setTodayActivities] = useState<string[]>([]);
+  const [todayExpectedFeedKg, setTodayExpectedFeedKg] = useState<number | null>(null);
+  const [todayActualFeedKg, setTodayActualFeedKg] = useState<number | null>(null);
+  const [dayInCulture, setDayInCulture] = useState<number | null>(null);
 
   const showFlash = (tone: 'ok' | 'warn', text: string) => {
     setFlash({ tone, text });
@@ -73,10 +76,20 @@ export default function HomePage() {
               if (isStaff && dash.averageFcr != null) bits.push(`FCR ${dash.averageFcr.toFixed(2)}`);
               setStatusNote(bits.join(' · ') || null);
               setTodayActivities(Array.isArray(dash.todayActivities) ? dash.todayActivities : []);
+              setTodayExpectedFeedKg(
+                typeof dash.todayExpectedFeedKg === 'number' ? dash.todayExpectedFeedKg : null,
+              );
+              setTodayActualFeedKg(
+                typeof dash.todayActualFeedKg === 'number' ? dash.todayActualFeedKg : null,
+              );
+              setDayInCulture(typeof dash.dayInCulture === 'number' ? dash.dayInCulture : null);
             })
             .catch(() => {
               setStatusNote(null);
               setTodayActivities([]);
+              setTodayExpectedFeedKg(null);
+              setTodayActualFeedKg(null);
+              setDayInCulture(null);
             });
         }
       })
@@ -152,6 +165,9 @@ export default function HomePage() {
           cycleId={cycleId}
           statusNote={statusNote}
           todayActivities={todayActivities}
+          todayExpectedFeedKg={todayExpectedFeedKg}
+          todayActualFeedKg={todayActualFeedKg}
+          dayInCulture={dayInCulture}
           onLog={() => setLogOpen(true)}
           onSwitchPond={(id) => load(id)}
         />

@@ -8,7 +8,7 @@ import { BrandLogo } from './BrandLogo';
 import { DesktopTodayRail } from './DesktopTodayRail';
 
 const NAV_LINKS = [
-  { href: '/', label: 'Home', match: (p: string) => p === '/' || p.startsWith('/display') },
+  { href: '/', label: 'Today', match: (p: string) => p === '/' || p.startsWith('/display') },
   { href: '/content/video', label: 'Videos', match: (p: string) => p.startsWith('/content/video') },
   { href: '/marketplace', label: 'Marketplace', match: (p: string) => p.startsWith('/marketplace') },
   { href: '/reports', label: 'Reports', match: (p: string) => p.startsWith('/reports') },
@@ -209,7 +209,7 @@ function PhoneTabBar({
   const [more, setMore] = useState(false);
   const moreActive = pathname.startsWith('/messages') || pathname.startsWith('/subscribe') || pathname.startsWith('/economics') || pathname.startsWith('/reports');
   const tabs = [
-    { href: '/', label: 'Home', icon: 'home', match: pathname === '/' || pathname.startsWith('/display') },
+    { href: '/', label: 'Today', icon: 'home', match: pathname === '/' || pathname.startsWith('/display') },
     { href: '/content/video', label: 'Videos', icon: 'video', match: pathname.startsWith('/content/video') },
     { href: '/marketplace', label: 'Market', icon: 'market', match: pathname.startsWith('/marketplace') },
   ];

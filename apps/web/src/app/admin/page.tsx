@@ -24,6 +24,7 @@ type Member = {
   estimatedFishOutputYear?: string | null;
   state?: string | null; country?: string | null; lga?: string | null;
   subscriptionStatus: string; subscriptionTier: string;
+  createdAt: string;
   _count: { farms: number };
   farms: {
     id: string; name: string; city: string; state: string; country: string;
@@ -216,6 +217,7 @@ function AdminPageInner() {
   const [farms, setFarms] = useState<FarmOption[]>([]);
   const [memberQuery, setMemberQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [memberSort, setMemberSort] = useState<'newest' | 'oldest'>('newest');
   const [directory, setDirectory] = useState<{
     members: {
       id: string; name: string; email: string; categories: string[];
@@ -798,18 +800,28 @@ function AdminPageInner() {
       list = list.filter((m) => (m.categories ?? []).includes(categoryFilter));
     }
     const q = memberQuery.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter((m) =>
-      [
-        m.name, m.email, m.phone, m.gender, m.role,
-        ...(m.categories ?? []).map(memberCategoryLabel),
-        ...m.farms.map((f) => `${f.name} ${f.city} ${f.state} ${f.country}`),
-      ]
-        .join(' ')
-        .toLowerCase()
-        .includes(q),
-    );
-  }, [members, memberQuery, categoryFilter]);
+    if (q) {
+      list = list.filter((m) =>
+        [
+          m.name, m.email, m.phone, m.gender, m.role,
+          ...(m.categories ?? []).map(memberCategoryLabel),
+          ...m.farms.map((f) => `${f.name} ${f.city} ${f.state} ${f.country}`),
+        ]
+          .join(' ')
+          .toLowerCase()
+          .includes(q),
+      );
+    }
+    const dir = memberSort === 'newest' ? -1 : 1;
+    return [...list].sort((a, b) => {
+      const ta = new Date(a.createdAt).getTime();
+      const tb = new Date(b.createdAt).getTime();
+      if (Number.isNaN(ta) && Number.isNaN(tb)) return 0;
+      if (Number.isNaN(ta)) return 1;
+      if (Number.isNaN(tb)) return -1;
+      return (ta - tb) * dir;
+    });
+  }, [members, memberQuery, categoryFilter, memberSort]);
 
   const staff = useMemo(
     () => members.filter((m) => m.role === 'super_admin' || m.role === 'manager'),
@@ -850,6 +862,15 @@ function AdminPageInner() {
                     <option key={c.value} value={c.value}>{c.label}</option>
                   ))}
                 </select>
+                <select
+                  value={memberSort}
+                  onChange={(e) => setMemberSort(e.target.value as 'newest' | 'oldest')}
+                  style={{ ...adminInput, minWidth: 180 }}
+                  aria-label="Sort by registration time"
+                >
+                  <option value="newest">Newest registered</option>
+                  <option value="oldest">Oldest registered</option>
+                </select>
                 <input
                   placeholder={`Search ${members.length} members`}
                   value={memberQuery}
@@ -866,6 +887,7 @@ function AdminPageInner() {
                   <th style={th}>Email / phone</th>
                   <th style={th}>What they do</th>
                   <th style={th}>Location</th>
+                  <th style={th}>Registered</th>
                   <th style={th}>Status</th>
                   <th style={th}>Action</th>
                 </tr>
@@ -937,6 +959,16 @@ function AdminPageInner() {
                       </div>
                     </td>
                     <td style={td}>
+                      <div style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+                        {m.createdAt ? new Date(m.createdAt).toLocaleDateString() : '—'}
+                      </div>
+                      {m.createdAt ? (
+                        <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: 2 }}>
+                          {new Date(m.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td style={td}>
                       <StatusPill status={m.subscriptionStatus} />
                     </td>
                     <td style={td} onClick={(e) => e.stopPropagation()}>
@@ -961,7 +993,7 @@ function AdminPageInner() {
                 ))}
                 {!filteredMembers.length && (
                   <tr>
-                    <td style={td} colSpan={6}>No members match this search.</td>
+                    <td style={td} colSpan={7}>No members match this search.</td>
                   </tr>
                 )}
               </tbody>
@@ -977,6 +1009,9 @@ function AdminPageInner() {
                     <div style={{ fontSize: '0.9rem', marginTop: 4 }}>{m.email}</div>
                     {m.phone && <div style={{ fontSize: '0.85rem', color: '#64748b' }}>{m.phone}</div>}
                     <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 6 }}>{place}</div>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: 4 }}>
+                      Registered {m.createdAt ? new Date(m.createdAt).toLocaleString() : '—'}
+                    </div>
                     <div style={{ marginTop: 8 }}><StatusPill status={m.subscriptionStatus} /></div>
                     <div className="member-card-actions">
                       <button type="button" onClick={() => openMember(m.id)} style={adminBtnGhost}>View</button>

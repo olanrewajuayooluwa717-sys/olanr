@@ -11,6 +11,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -66,14 +67,23 @@ export default function LoginPage() {
           </label>
           <label style={{ display: 'block', marginBottom: '0.85rem' }}>
             <span style={{ fontSize: '0.85rem', color: '#555' }}>Password</span>
-            <input
-              type="password"
-              required
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={{ ...inputStyle, display: 'block', width: '100%', marginTop: 4, boxSizing: 'border-box' }}
-            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                style={{ ...inputStyle, flex: 1, boxSizing: 'border-box' }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                style={{ ...btnStyle, background: '#64748b', whiteSpace: 'nowrap' }}
+              >
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
           </label>
           {error && <p style={{ color: 'crimson', fontSize: '0.9rem' }}>{error}</p>}
           <button type="submit" style={{ ...btnStyle, width: '100%' }} disabled={loading}>
